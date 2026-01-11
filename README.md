@@ -6,12 +6,12 @@
 
 ## Features
 
-- 🔄 Replace `{{placeholder}}` values with HTML content
+- 🔄 Replace `{{placeholder}}` values with HTML **or plain text** (normal fields)
 - 📊 Native Word tables from HTML `<table>`
 - 📝 Full text formatting (bold, italic, underline, strikethrough)
 - 🎨 Text and background colors via CSS styles
 - 📋 Bullet and numbered lists
-- 📑 Multiple placeholders support
+- 📑 Multiple placeholders support (mix HTML and plain text)
 - 💻 Use as CLI tool or Go library
 
 ## Installation
@@ -37,17 +37,19 @@ dgdoc --template template.docx --output report.docx --data data.json
 # Using inline JSON
 dgdoc --template template.docx --json '{"content": "<h1>Hello</h1><p>World</p>"}'
 
-# Multiple placeholders
-dgdoc --template template.docx --json '{"title": "<h1>Report</h1>", "body": "<p>Content</p>"}'
+# Mixed HTML and normal fields
+dgdoc --template template.docx --json '{"customer": "Ahmet Yılmaz", "address": "İstanbul, Türkiye", "content": "<h1>Title</h1><p>Body</p>"}'
 ```
 
 ### JSON Data Format
 
 ```json
 {
+  "customer": "Ahmet Yılmaz",
+  "address": "Atatürk Mah. No:1, İstanbul",
   "content": "<h1>Main Title</h1><p>Paragraph text</p>",
   "table_data": "<table><tr><td>Cell 1</td><td>Cell 2</td></tr></table>",
-  "author": "<span style=\"color: blue;\">John Doe</span>"
+  "status": "<span style=\"color: green;\">✓ Aktif</span>"
 }
 ```
 

@@ -39,13 +39,14 @@ func main() {
 	`
 	template.SetContent("content", mainContent)
 
-	// Author with color
-	template.SetContent("author", `<span style="color: blue;">Dr. Mehmet Yılmaz</span>`)
+	// Normal fields (plain text)
+	template.ReplaceText("customer_name", "Ahmet Can Bilgay")
+	template.ReplaceText("address", "Atatürk Mah. Marmara Sok. No:5, Ümraniye, İstanbul")
 
-	// Date in bold
+	// Date in bold using SetContent
 	template.SetContent("date", `<strong>11 Ocak 2026</strong>`)
 
-	// Status indicator
+	// Status indicator using SetContent
 	template.SetContent("status", `<span style="color: white; background-color: green;"> AKTİF </span>`)
 
 	// Save

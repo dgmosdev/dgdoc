@@ -3,9 +3,16 @@ package docx
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -16,6 +23,8 @@ type Template struct {
 	path    string
 	files   map[string][]byte
 	zipFile *zip.ReadCloser
+	nextRID int
+	mediaID int
 }
 
 // Open reads a DOCX file from the given path and prepares a Template for manipulation.
@@ -50,7 +59,42 @@ func Open(path string) (*Template, error) {
 		t.files[f.Name] = content
 	}
 
+	t.initTracking()
+
 	return t, nil
+}
+
+func (t *Template) initTracking() {
+	// Find highest rId in word/_rels/document.xml.rels
+	rels, ok := t.files["word/_rels/document.xml.rels"]
+	if ok {
+		re := regexp.MustCompile(`Id="rId(\d+)"`)
+		matches := re.FindAllStringSubmatch(string(rels), -1)
+		max := 0
+		for _, m := range matches {
+			var id int
+			fmt.Sscanf(m[1], "%d", &id)
+			if id > max {
+				max = id
+			}
+		}
+		t.nextRID = max + 1
+	} else {
+		t.nextRID = 1
+	}
+
+	// Find highest media index
+	maxMedia := 0
+	for name := range t.files {
+		if strings.HasPrefix(name, "word/media/image") {
+			var id int
+			fmt.Sscanf(strings.TrimPrefix(name, "word/media/image"), "%d", &id)
+			if id > maxMedia {
+				maxMedia = id
+			}
+		}
+	}
+	t.mediaID = maxMedia + 1
 }
 
 // Close releases the underlying ZIP file reader resources.
@@ -66,10 +110,19 @@ func (t *Template) Close() error {
 // The placeholder should be provided without curly braces (e.g., "content" for {{content}}).
 // Blocks like tables and lists will be inserted as native Word elements.
 func (t *Template) SetContent(placeholder, htmlContent string) error {
-	// Convert HTML to OOXML
-	ooxml, err := HTMLToOOXML(htmlContent)
+	var ooxml string
+	var err error
+
+	// Check if this is a special placeholder (e.g., %image or %link)
+	if strings.HasPrefix(placeholder, "%") {
+		ooxml, err = t.handleSpecialPlaceholder(placeholder, htmlContent)
+	} else {
+		// Convert HTML to OOXML
+		ooxml, err = t.HTMLToOOXML(htmlContent)
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to convert HTML: %w", err)
+		return fmt.Errorf("failed to process content for %s: %w", placeholder, err)
 	}
 
 	// Process document.xml
@@ -95,159 +148,143 @@ func replacePlaceholder(content, placeholder, replacement string) string {
 // This handles cases where Word inserts bookmarks, formatting changes, or other elements
 // between parts of the placeholder text
 func mergeSplitPlaceholder(content, placeholder, replacement string) string {
-	fullPlaceholder := "{{" + placeholder + "}}"
+	fullPlaceholder := "{" + placeholder + "}"
 
-	// Extract all <w:t> text content with positions
-	textPattern := regexp.MustCompile(`<w:t[^>]*>([^<]*)</w:t>`)
-	allMatches := textPattern.FindAllStringSubmatchIndex(content, -1)
+	for {
+		// Extract all <w:t> text content with positions
+		textPattern := regexp.MustCompile(`<w:t[^>]*>([^<]*)</w:t>`)
+		allMatches := textPattern.FindAllStringSubmatchIndex(content, -1)
 
-	if len(allMatches) == 0 {
-		return content
-	}
-
-	// Build a map of text content to find the placeholder
-	var textBuilder strings.Builder
-	type textSegment struct {
-		start, end         int // Position in original content
-		textStart, textEnd int // Position of text within the segment
-	}
-	segments := make([]textSegment, 0, len(allMatches))
-
-	for _, match := range allMatches {
-		text := content[match[2]:match[3]]
-		textBuilder.WriteString(text)
-		segments = append(segments, textSegment{
-			start:     match[0],
-			end:       match[1],
-			textStart: match[2],
-			textEnd:   match[3],
-		})
-	}
-
-	allText := textBuilder.String()
-
-	// Find the placeholder in the concatenated text
-	placeholderIdx := strings.Index(allText, fullPlaceholder)
-	if placeholderIdx == -1 {
-		return content
-	}
-
-	placeholderEndIdx := placeholderIdx + len(fullPlaceholder)
-
-	// Find which segments contain the placeholder
-	var startSegmentIdx, endSegmentIdx int = -1, -1
-	var charPos int
-
-	for i, seg := range segments {
-		segmentText := content[seg.textStart:seg.textEnd]
-		segmentLen := len(segmentText)
-
-		if startSegmentIdx == -1 && charPos+segmentLen > placeholderIdx {
-			startSegmentIdx = i
+		if len(allMatches) == 0 {
+			return content
 		}
-		if charPos+segmentLen >= placeholderEndIdx {
-			endSegmentIdx = i
-			break
+
+		// Build a map of text content to find the placeholder
+		var textBuilder strings.Builder
+		type textSegment struct {
+			start, end         int // Position in original content
+			textStart, textEnd int // Position of text within the segment
 		}
-		charPos += segmentLen
-	}
+		segments := make([]textSegment, 0, len(allMatches))
 
-	if startSegmentIdx == -1 || endSegmentIdx == -1 {
-		return content
-	}
+		for _, match := range allMatches {
+			text := content[match[2]:match[3]]
+			textBuilder.WriteString(text)
+			segments = append(segments, textSegment{
+				start:     match[0],
+				end:       match[1],
+				textStart: match[2],
+				textEnd:   match[3],
+			})
+		}
 
-	// Check if the replacement contains block-level elements
-	isBlockReplacement := strings.Contains(replacement, "<w:p") || strings.Contains(replacement, "<w:tbl")
+		allText := textBuilder.String()
 
-	if isBlockReplacement {
-		// Existing behavior: find and replace the whole container (paragraph or table)
-		startPos := segments[startSegmentIdx].start
-		endPos := segments[endSegmentIdx].end
+		// Find the placeholder in the concatenated text
+		placeholderIdx := strings.Index(allText, fullPlaceholder)
+		if placeholderIdx == -1 {
+			return content
+		}
 
-		contentBefore := content[:startPos]
-		contentAfter := content[endPos:]
+		placeholderEndIdx := placeholderIdx + len(fullPlaceholder)
 
-		// Check if we're inside a table cell
-		lastTcStart := strings.LastIndex(contentBefore, "<w:tc>")
-		lastTcEnd := strings.LastIndex(contentBefore, "</w:tc>")
-		insideTableCell := lastTcStart > lastTcEnd && lastTcStart != -1
+		// Find which segments contain the placeholder
+		var startSegmentIdx, endSegmentIdx int = -1, -1
+		var charPos int
 
-		var replaceStart, replaceEnd int
+		for i, seg := range segments {
+			segmentText := content[seg.textStart:seg.textEnd]
+			segmentLen := len(segmentText)
 
-		if insideTableCell {
-			lastTblStart := strings.LastIndex(contentBefore, "<w:tbl>")
-			if lastTblStart == -1 {
-				return content
+			if startSegmentIdx == -1 && charPos+segmentLen > placeholderIdx {
+				startSegmentIdx = i
 			}
-			tblEndIdx := strings.Index(contentAfter, "</w:tbl>")
-			if tblEndIdx == -1 {
-				return content
+			if charPos+segmentLen >= placeholderEndIdx {
+				endSegmentIdx = i
+				break
 			}
-			replaceStart = lastTblStart
-			replaceEnd = endPos + tblEndIdx + len("</w:tbl>")
+			charPos += segmentLen
+		}
+
+		if startSegmentIdx == -1 || endSegmentIdx == -1 {
+			return content
+		}
+
+		// Check if the replacement contains block-level elements
+		isBlockReplacement := strings.Contains(replacement, "<w:p") || strings.Contains(replacement, "<w:tbl")
+
+		if isBlockReplacement {
+			// Existing behavior: find and replace the whole container (paragraph or table)
+			startPos := segments[startSegmentIdx].start
+			endPos := segments[endSegmentIdx].end
+
+			contentBefore := content[:startPos]
+			contentAfter := content[endPos:]
+
+			// Check if we're inside a table cell
+			lastTcStart := strings.LastIndex(contentBefore, "<w:tc>")
+			lastTcEnd := strings.LastIndex(contentBefore, "</w:tc>")
+			insideTableCell := lastTcStart > lastTcEnd && lastTcStart != -1
+
+			var replaceStart, replaceEnd int
+
+			if insideTableCell {
+				lastTblStart := strings.LastIndex(contentBefore, "<w:tbl>")
+				if lastTblStart == -1 {
+					return content
+				}
+				tblEndIdx := strings.Index(contentAfter, "</w:tbl>")
+				if tblEndIdx == -1 {
+					return content
+				}
+				replaceStart = lastTblStart
+				replaceEnd = endPos + tblEndIdx + len("</w:tbl>")
+			} else {
+				pStartPattern := regexp.MustCompile(`<w:p>|<w:p\s[^>]*>`)
+				pStarts := pStartPattern.FindAllStringIndex(contentBefore, -1)
+				if len(pStarts) == 0 {
+					return content
+				}
+				replaceStart = pStarts[len(pStarts)-1][0]
+				pEndIdx := strings.Index(contentAfter, "</w:p>")
+				if pEndIdx == -1 {
+					return content
+				}
+				replaceEnd = endPos + pEndIdx + len("</w:p>")
+			}
+			content = content[:replaceStart] + replacement + content[replaceEnd:]
 		} else {
-			pStartPattern := regexp.MustCompile(`<w:p>|<w:p\s[^>]*>`)
-			pStarts := pStartPattern.FindAllStringIndex(contentBefore, -1)
-			if len(pStarts) == 0 {
-				return content
+			// Inline replacement
+			startSeg := segments[startSegmentIdx]
+			endSeg := segments[endSegmentIdx]
+
+			var currentPos int
+			for i := 0; i < startSegmentIdx; i++ {
+				currentPos += segments[i].textEnd - segments[i].textStart
 			}
-			replaceStart = pStarts[len(pStarts)-1][0]
-			pEndIdx := strings.Index(contentAfter, "</w:p>")
-			if pEndIdx == -1 {
-				return content
+			offsetInStart := placeholderIdx - currentPos
+
+			currentPos = 0
+			for i := 0; i < endSegmentIdx; i++ {
+				currentPos += segments[i].textEnd - segments[i].textStart
 			}
-			replaceEnd = endPos + pEndIdx + len("</w:p>")
-		}
-		return content[:replaceStart] + replacement + content[replaceEnd:]
-	} else {
-		// New behavior: Inline replacement
-		// Only replace the text inside the <w:t> elements
-		// We need to handle the fact that the placeholder might start/end mid-segment
+			offsetInEnd := placeholderEndIdx - currentPos
 
-		startSeg := segments[startSegmentIdx]
-		endSeg := segments[endSegmentIdx]
+			var result strings.Builder
+			result.WriteString(content[:startSeg.textStart+offsetInStart])
 
-		// Calculate relative positions in the first and last segments
-		var currentPos int
-		for i := 0; i < startSegmentIdx; i++ {
-			currentPos += segments[i].textEnd - segments[i].textStart
-		}
-		offsetInStart := placeholderIdx - currentPos
-
-		currentPos = 0
-		for i := 0; i < endSegmentIdx; i++ {
-			currentPos += segments[i].textEnd - segments[i].textStart
-		}
-		offsetInEnd := placeholderEndIdx - currentPos
-
-		// Rebuild the XML but replacing only the placeholder part
-		var result strings.Builder
-		result.WriteString(content[:startSeg.textStart+offsetInStart])
-
-		// If the replacement is just <w:t>text</w:t>, we only want the 'text' part
-		// because we are already inside a <w:t> or at least at a position where
-		// we expect text content.
-		// Actually, if we are doing inline replacement, we might want to replace
-		// the WHOLE sequence of <w:t> elements with the new OOXML snippet if it's multiple runs.
-		// But if it's just raw text wrapped in <w:t>, let's strip the <w:t> if we are injecting
-		// into an existing <w:t>.
-
-		// Let's be smart: if replacement starts with <w:r>, it's a full run.
-		// If it's just <w:t>, we can inject the text content.
-
-		cleanReplacement := replacement
-		if strings.HasPrefix(replacement, "<w:t") && strings.HasSuffix(replacement, "</w:t>") {
-			// Extract content from <w:t>
-			tMatch := regexp.MustCompile(`<w:t[^>]*>(.*)</w:t>`).FindStringSubmatch(replacement)
-			if len(tMatch) > 1 {
-				cleanReplacement = tMatch[1]
+			cleanReplacement := replacement
+			if strings.HasPrefix(replacement, "<w:t") && strings.HasSuffix(replacement, "</w:t>") {
+				tMatch := regexp.MustCompile(`<w:t[^>]*>(.*)</w:t>`).FindStringSubmatch(replacement)
+				if len(tMatch) > 1 {
+					cleanReplacement = tMatch[1]
+				}
 			}
+
+			result.WriteString(cleanReplacement)
+			result.WriteString(content[endSeg.textStart+offsetInEnd:])
+			content = result.String()
 		}
-
-		result.WriteString(cleanReplacement)
-		result.WriteString(content[endSeg.textStart+offsetInEnd:])
-
-		return result.String()
 	}
 }
 
@@ -308,8 +345,8 @@ func (t *Template) ReplaceText(placeholder, text string) error {
 func (t *Template) Apply(data map[string]any) error {
 	for placeholder, val := range data {
 		// Clean placeholder name
-		placeholder = strings.TrimPrefix(placeholder, "{{")
-		placeholder = strings.TrimSuffix(placeholder, "}}")
+		placeholder = strings.TrimPrefix(placeholder, "{")
+		placeholder = strings.TrimSuffix(placeholder, "}")
 
 		var htmlContent string
 		if s, ok := val.(string); ok {
@@ -323,6 +360,157 @@ func (t *Template) Apply(data map[string]any) error {
 		}
 	}
 	return nil
+}
+
+func (t *Template) handleSpecialPlaceholder(placeholder, content string) (string, error) {
+	// Detect if it is an image
+	isImage := false
+	lower := strings.ToLower(content)
+	if strings.HasPrefix(lower, "data:image/") ||
+		strings.HasSuffix(lower, ".png") ||
+		strings.HasSuffix(lower, ".jpg") ||
+		strings.HasSuffix(lower, ".jpeg") ||
+		strings.HasSuffix(lower, ".gif") {
+		isImage = true
+	}
+
+	if isImage {
+		var imgData []byte
+		var ext string
+		var err error
+
+		if strings.HasPrefix(content, "data:image/") {
+			// Handle Base64
+			parts := strings.SplitN(content, ",", 2)
+			if len(parts) != 2 {
+				return "", fmt.Errorf("invalid base64 image")
+			}
+			imgData, err = base64.StdEncoding.DecodeString(parts[1])
+			ext = ".png" // Default, could be more specific
+		} else if strings.HasPrefix(content, "http") {
+			// Handle URL
+			resp, err := http.Get(content)
+			if err != nil {
+				return "", fmt.Errorf("failed to download image: %w", err)
+			}
+			defer resp.Body.Close()
+			imgData, err = io.ReadAll(resp.Body)
+			ext = filepath.Ext(content)
+		} else {
+			// Handle local file
+			imgData, err = os.ReadFile(content)
+			ext = filepath.Ext(content)
+		}
+
+		if err != nil {
+			return "", err
+		}
+
+		rId, err := t.addImage(imgData, ext)
+		if err != nil {
+			return "", err
+		}
+
+		// Get dimensions
+		img, _, err := image.Decode(bytes.NewReader(imgData))
+		width, height := 200, 100 // Default
+		if err == nil {
+			bounds := img.Bounds()
+			width, height = bounds.Dx(), bounds.Dy()
+		}
+
+		return generateImageXML(rId, width, height), nil
+	}
+
+	// Handle as Link
+	url := content
+	text := content
+	if strings.Contains(content, "|") {
+		parts := strings.SplitN(content, "|", 2)
+		text = parts[0]
+		url = parts[1]
+	}
+
+	return t.generateLinkXML(url, text), nil
+}
+
+func (t *Template) addRelationship(target, relType string, external bool) string {
+	rId := fmt.Sprintf("rId%d", t.nextRID)
+	t.nextRID++
+
+	relPath := "word/_rels/document.xml.rels"
+	rels, ok := t.files[relPath]
+	if !ok {
+		// Create minimal rels if missing
+		rels = []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`)
+	}
+
+	targetMode := ""
+	if external {
+		targetMode = ` TargetMode="External"`
+	}
+
+	newRel := fmt.Sprintf(`<Relationship Id="%s" Type="%s" Target="%s"%s/>`, rId, relType, target, targetMode)
+	content := string(rels)
+	if strings.Contains(content, "</Relationships>") {
+		content = strings.Replace(content, "</Relationships>", newRel+"</Relationships>", 1)
+	} else {
+		content += newRel
+	}
+	t.files[relPath] = []byte(content)
+
+	return rId
+}
+
+func (t *Template) addImage(data []byte, extension string) (string, error) {
+	if extension == "" {
+		extension = ".png"
+	}
+	imageName := fmt.Sprintf("image%d%s", t.mediaID, extension)
+	t.mediaID++
+
+	imagePath := "word/media/" + imageName
+	t.files[imagePath] = data
+
+	// Add relationship
+	rId := t.addRelationship("media/"+imageName, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", false)
+	return rId, nil
+}
+
+func generateImageXML(rId string, widthPx, heightPx int) string {
+	// Convert px to EMUs (1 px ~= 9525 EMUs)
+	width := widthPx * 9525
+	height := heightPx * 9525
+
+	// Limit size if too large (e.g., max width 6 inches ~= 5486400 EMUs)
+	maxWidth := 5486400
+	if width > maxWidth {
+		ratio := float64(maxWidth) / float64(width)
+		width = maxWidth
+		height = int(float64(height) * ratio)
+	}
+
+	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="1" name="Image"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Picture"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		width, height, rId, width, height)
+}
+
+func (t *Template) generateLinkXML(url, text string) string {
+	rId := t.addRelationship(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", true)
+
+	// If text already contains OOXML (from HTML parser), we need to inject the style into each run.
+	// For simplicity, let's wrap it in a <w:hyperlink> element which handles the clickability.
+	// Word expects runs inside <w:hyperlink>.
+
+	var content string
+	if strings.Contains(text, "<w:r") {
+		// Already has runs, just use them.
+		content = text
+	} else {
+		// Wrap text in a run with Hyperlink style
+		content = fmt.Sprintf(`<w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:u w:val="single"/><w:color w:val="0563C1"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>`, escapeXML(text))
+	}
+
+	return fmt.Sprintf(`<w:hyperlink r:id="%s" w:history="1">%s</w:hyperlink>`, rId, content)
 }
 
 func escapeXML(s string) string {

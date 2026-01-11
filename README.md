@@ -6,7 +6,7 @@
 
 ## Features
 
-- 🔄 Replace `{{placeholder}}` values with HTML **or plain text** (normal fields)
+- 🔄 Replace `{placeholder}` values with HTML **or plain text** (normal fields)
 - 📊 Native Word tables from HTML `<table>`
 - 📝 Full text formatting (bold, italic, underline, strikethrough)
 - 🎨 Text and background colors via CSS styles
@@ -158,16 +158,35 @@ Named colors: `red`, `blue`, `green`, `yellow`, `orange`, `pink`, `purple`, `nav
 
 ## Template Format
 
-Create a Word document with placeholders like `{{placeholder_name}}`:
+The library supports the following placeholder formats:
 
-```
-Dear {{recipient}},
+- `{placeholder}`: Replaced with HTML or plain text.
+- `{%placeholder}`: Special syntax for **Images** and **Hyperlinks**.
 
-{{content}}
+### Special Syntax (`{%placeholder}`)
 
-Best regards,
-{{signature}}
-```
+When using the `{%}` prefix, `dgdoc` automatically detects the type of content:
+
+| Content Type | Example Value | Result |
+|--------------|---------------|--------|
+| **Image (URL)** | `https://example.com/sig.png` | Embedded image in document |
+| **Image (Base64)** | `data:image/png;base64,...` | Embedded image from base64 data |
+| **Image (Local)** | `./assets/signature.jpg` | Embedded image from file path |
+| **Hyperlink** | `https://google.com` | Clickable link (Text is the URL) |
+| **Link with Text**| `Google|https://google.com` | Clickable link with custom text |
+
+### Supported HTML Features
+
+| Feature | HTML Tags/Attributes |
+|---------|-----------------------|
+| **Text Styles** | `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<strike>`, `<span>` |
+| **Colors** | `<span style="color: #ff0000; background-color: #ffff00">` |
+| **Headings** | `<h1>` through `<h6>` |
+| **Lists** | `<ul>` (unordered), `<ol>` (ordered), `<li>` |
+| **Tables** | `<table>`, `<tr>`, `<td>`, `<th>`, `<thead>`, `<tbody>` |
+| **Links** | `<a href="https://...">Link Text</a>` |
+| **Images** | `<img src="https://..." />` (URL, Local, or Base64) |
+| **Break** | `<br/>` |
 
 ## API Reference
 
@@ -178,10 +197,10 @@ Opens a DOCX template file.
 Replaces multiple placeholders at once. Useful for batch updates.
 
 ### `template.SetContent(placeholder, html string) error`
-Replaces `{{placeholder}}` with converted HTML content.
+Replaces `{placeholder}` with converted HTML content.
 
 ### `template.ReplaceText(placeholder, text string) error`
-Replaces `{{placeholder}}` with plain text.
+Replaces `{placeholder}` with plain text.
 
 ### `template.Save(path string) error`
 Saves the modified document.

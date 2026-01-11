@@ -6,7 +6,7 @@ import (
 )
 
 func TestMergeSplitPlaceholder_Inline(t *testing.T) {
-	content := `<w:p><w:r><w:t>Hello </w:t></w:r><w:r><w:t>{{</w:t></w:r><w:r><w:t>name</w:t></w:r><w:r><w:t>}}</w:t></w:r><w:r><w:t>, welcome!</w:t></w:r></w:p>`
+	content := `<w:p><w:r><w:t>Hello </w:t></w:r><w:r><w:t>{</w:t></w:r><w:r><w:t>name</w:t></w:r><w:r><w:t>}</w:t></w:r><w:r><w:t>, welcome!</w:t></w:r></w:p>`
 	placeholder := "name"
 	replacement := "<w:t>Ahmet</w:t>"
 
@@ -30,7 +30,7 @@ func TestMergeSplitPlaceholder_Inline(t *testing.T) {
 }
 
 func TestMergeSplitPlaceholder_Block(t *testing.T) {
-	content := `<w:p><w:r><w:t>{{content}}</w:t></w:r></w:p>`
+	content := `<w:p><w:r><w:t>{content}</w:t></w:r></w:p>`
 	placeholder := "content"
 	replacement := `<w:p><w:r><w:t>New Paragraph</w:t></w:r></w:p>`
 
@@ -58,7 +58,7 @@ func TestApply(t *testing.T) {
 	// We need to mock document.xml for this test
 	temp := &Template{
 		files: map[string][]byte{
-			"word/document.xml": []byte(`<w:p><w:t>{{name}}</w:t></w:p><w:p><w:t>{{age}}</w:t></w:p>`),
+			"word/document.xml": []byte(`<w:p><w:t>{name}</w:t></w:p><w:p><w:t>{age}</w:t></w:p>`),
 		},
 	}
 
@@ -78,5 +78,35 @@ func TestApply(t *testing.T) {
 	}
 	if !strings.Contains(content, "30") {
 		t.Errorf("Expected content to contain '30', got: %s", content)
+	}
+}
+
+func TestApply_Special(t *testing.T) {
+	temp := &Template{
+		files: map[string][]byte{
+			"word/document.xml":            []byte(`<w:p><w:t>{%link}</w:t></w:p>`),
+			"word/_rels/document.xml.rels": []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`),
+		},
+	}
+	temp.initTracking()
+
+	data := map[string]any{
+		"%link": "Google|https://google.com",
+	}
+
+	err := temp.Apply(data)
+	if err != nil {
+		t.Fatalf("Apply special failed: %v", err)
+	}
+
+	content := string(temp.files["word/document.xml"])
+	if !strings.Contains(content, "HYPERLINK") {
+		t.Errorf("Expected content to contain 'HYPERLINK', got: %s", content)
+	}
+	if !strings.Contains(content, "https://google.com") {
+		t.Errorf("Expected content to contain URL, got: %s", content)
+	}
+	if !strings.Contains(content, "Google") {
+		t.Errorf("Expected content to contain text, got: %s", content)
 	}
 }

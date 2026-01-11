@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func HTMLToOOXML(htmlContent string) (string, error) {
+func (t *Template) HTMLToOOXML(htmlContent string) (string, error) {
 	// Parse the HTML
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
@@ -17,7 +17,7 @@ func HTMLToOOXML(htmlContent string) (string, error) {
 
 	// Convert to OOXML
 	var builder strings.Builder
-	convertNode(doc, &builder, &textState{})
+	t.convertNode(doc, &builder, &textState{})
 
 	return builder.String(), nil
 }
@@ -54,23 +54,45 @@ func (s *textState) copy() *textState {
 	}
 }
 
-func convertNode(n *html.Node, builder *strings.Builder, state *textState) {
+func (t *Template) convertNode(n *html.Node, builder *strings.Builder, state *textState) {
 	switch n.Type {
 	case html.ElementNode:
-		handleElement(n, builder, state)
+		t.handleElement(n, builder, state)
 	case html.TextNode:
-		text := strings.TrimSpace(n.Data)
+		parent := ""
+		if n.Parent != nil {
+			parent = strings.ToLower(n.Parent.Data)
+		}
+
+		var text string
+		// List of tags where whitespace matters (inline contexts)
+		// We preserve single spaces here to prevent "WordCombining" issues
+		if parent == "p" || parent == "span" || parent == "a" || parent == "li" ||
+			parent == "h1" || parent == "h2" || parent == "h3" || parent == "h4" ||
+			parent == "h5" || parent == "h6" || parent == "b" || parent == "strong" ||
+			parent == "i" || parent == "em" || parent == "u" || parent == "s" ||
+			parent == "strike" || parent == "del" || parent == "td" || parent == "th" {
+
+			// Collapse whitespace but preserve single spaces
+			// standard HTML behavior: newlines/tabs -> space, multiple spaces -> single space
+			re := regexp.MustCompile(`[\s\r\n]+`)
+			text = re.ReplaceAllString(n.Data, " ")
+		} else {
+			// Block context - trim aggressively to avoid stray runs between blocks
+			text = strings.TrimSpace(n.Data)
+		}
+
 		if text != "" {
 			writeText(builder, text, state)
 		}
 	case html.DocumentNode:
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, state)
+			t.convertNode(c, builder, state)
 		}
 	}
 }
 
-func handleElement(n *html.Node, builder *strings.Builder, state *textState) {
+func (t *Template) handleElement(n *html.Node, builder *strings.Builder, state *textState) {
 	tag := strings.ToLower(n.Data)
 	newState := state.copy()
 
@@ -81,17 +103,17 @@ func handleElement(n *html.Node, builder *strings.Builder, state *textState) {
 	case "html", "body", "head", "div", "article", "section", "main", "header", "footer", "nav", "aside":
 		// Container elements - just process children
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "span":
 		// Span with potential styling - process children with applied styles
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "p":
-		writeParagraph(n, builder, newState)
+		t.writeParagraph(n, builder, newState)
 
 	case "br":
 		builder.WriteString(`<w:r><w:br/></w:r>`)
@@ -99,25 +121,25 @@ func handleElement(n *html.Node, builder *strings.Builder, state *textState) {
 	case "strong", "b":
 		newState.bold = true
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "em", "i":
 		newState.italic = true
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "u":
 		newState.underline = true
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "s", "strike", "del":
 		newState.strike = true
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "ul":
@@ -126,7 +148,7 @@ func handleElement(n *html.Node, builder *strings.Builder, state *textState) {
 		newState.listLevel++
 		newState.listNum = 0
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "ol":
@@ -135,37 +157,37 @@ func handleElement(n *html.Node, builder *strings.Builder, state *textState) {
 		newState.listLevel++
 		newState.listNum = 0
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 
 	case "li":
-		writeListItem(n, builder, newState)
+		t.writeListItem(n, builder, newState)
 
 	case "table":
-		writeTable(n, builder, newState)
+		t.writeTable(n, builder, newState)
 
 	case "h1", "h2", "h3", "h4", "h5", "h6":
-		writeHeading(n, builder, newState, tag)
+		t.writeHeading(n, builder, newState, tag)
 
 	case "a":
-		// For now, just render the text
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
-		}
+		t.writeAnchor(n, builder, newState)
+
+	case "img":
+		t.writeImage(n, builder, newState)
 
 	default:
 		// Unknown element - process children
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			convertNode(c, builder, newState)
+			t.convertNode(c, builder, newState)
 		}
 	}
 }
 
-func writeParagraph(n *html.Node, builder *strings.Builder, state *textState) {
+func (t *Template) writeParagraph(n *html.Node, builder *strings.Builder, state *textState) {
 	builder.WriteString(`<w:p><w:pPr></w:pPr>`)
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		convertNode(c, builder, state)
+		t.convertNode(c, builder, state)
 	}
 
 	builder.WriteString(`</w:p>`)
@@ -215,7 +237,7 @@ func writeText(builder *strings.Builder, text string, state *textState) {
 	builder.WriteString(`</w:r>`)
 }
 
-func writeListItem(n *html.Node, builder *strings.Builder, state *textState) {
+func (t *Template) writeListItem(n *html.Node, builder *strings.Builder, state *textState) {
 	state.listNum++
 
 	builder.WriteString(`<w:p>`)
@@ -248,13 +270,12 @@ func writeListItem(n *html.Node, builder *strings.Builder, state *textState) {
 
 	// Process children
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		convertNode(c, builder, state)
+		t.convertNode(c, builder, state)
 	}
-
 	builder.WriteString(`</w:p>`)
 }
 
-func writeTable(n *html.Node, builder *strings.Builder, state *textState) {
+func (t *Template) writeTable(n *html.Node, builder *strings.Builder, state *textState) {
 	// First, count columns by examining the first row
 	colCount := countTableColumns(n)
 
@@ -290,11 +311,11 @@ func writeTable(n *html.Node, builder *strings.Builder, state *textState) {
 			if tag == "tbody" || tag == "thead" || tag == "tfoot" {
 				for tr := c.FirstChild; tr != nil; tr = tr.NextSibling {
 					if tr.Type == html.ElementNode && strings.ToLower(tr.Data) == "tr" {
-						writeTableRow(tr, builder, state, colWidth)
+						t.writeTableRow(tr, builder, state, colWidth)
 					}
 				}
 			} else if tag == "tr" {
-				writeTableRow(c, builder, state, colWidth)
+				t.writeTableRow(c, builder, state, colWidth)
 			}
 		}
 	}
@@ -337,14 +358,14 @@ func countRowCells(tr *html.Node) int {
 	return count
 }
 
-func writeTableRow(n *html.Node, builder *strings.Builder, state *textState, colWidth int) {
+func (t *Template) writeTableRow(n *html.Node, builder *strings.Builder, state *textState, colWidth int) {
 	builder.WriteString(`<w:tr>`)
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
 			tag := strings.ToLower(c.Data)
 			if tag == "td" || tag == "th" {
-				writeTableCell(c, builder, state, tag == "th", colWidth)
+				t.writeTableCell(c, builder, state, tag == "th", colWidth)
 			}
 		}
 	}
@@ -352,7 +373,7 @@ func writeTableRow(n *html.Node, builder *strings.Builder, state *textState, col
 	builder.WriteString(`</w:tr>`)
 }
 
-func writeTableCell(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int) {
+func (t *Template) writeTableCell(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int) {
 	builder.WriteString(`<w:tc>`)
 	builder.WriteString(fmt.Sprintf(`<w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>`, colWidth))
 
@@ -367,14 +388,14 @@ func writeTableCell(n *html.Node, builder *strings.Builder, state *textState, is
 
 	// Process cell content
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		convertNode(c, builder, cellState)
+		t.convertNode(c, builder, cellState)
 	}
 
 	builder.WriteString(`</w:p>`)
 	builder.WriteString(`</w:tc>`)
 }
 
-func writeHeading(n *html.Node, builder *strings.Builder, state *textState, tag string) {
+func (t *Template) writeHeading(n *html.Node, builder *strings.Builder, state *textState, tag string) {
 	// Map heading level to font size (in half-points)
 	sizes := map[string]string{
 		"h1": "48", // 24pt
@@ -394,10 +415,52 @@ func writeHeading(n *html.Node, builder *strings.Builder, state *textState, tag 
 	headingState.fontSize = sizes[tag]
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		convertNode(c, builder, headingState)
+		t.convertNode(c, builder, headingState)
 	}
 
 	builder.WriteString(`</w:p>`)
+}
+
+func (t *Template) writeAnchor(n *html.Node, builder *strings.Builder, state *textState) {
+	href := ""
+	for _, attr := range n.Attr {
+		if attr.Key == "href" {
+			href = attr.Val
+			break
+		}
+	}
+
+	linkState := state.copy()
+	linkState.fontColor = "0563C1" // Standard Word Hyperlink Blue
+	linkState.underline = true
+
+	var content strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		t.convertNode(c, &content, linkState)
+	}
+
+	if href != "" {
+		builder.WriteString(t.generateLinkXML(href, content.String()))
+	} else {
+		builder.WriteString(content.String())
+	}
+}
+
+func (t *Template) writeImage(n *html.Node, builder *strings.Builder, state *textState) {
+	src := ""
+	for _, attr := range n.Attr {
+		if attr.Key == "src" {
+			src = attr.Val
+			break
+		}
+	}
+
+	if src != "" {
+		ooxml, err := t.handleSpecialPlaceholder("%img", src)
+		if err == nil {
+			builder.WriteString(ooxml)
+		}
+	}
 }
 
 // ParseStyle parses inline CSS style attribute

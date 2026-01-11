@@ -1,8 +1,0 @@
-{
-    "customer_name": "Ahmet Can Bilgay",
-    "address": "Atatürk Mah. Marmara Sok. No:5, Ümraniye, İstanbul",
-    "content": "<h1>Proje Raporu</h1><p>Bu rapor <strong>dgdoc</strong> ile oluşturulmuştur.</p>",
-    "table": "<table><tr><th>Ürün</th><th>Adet</th></tr><tr><td>Geliştirme Paketi</td><td>1</td></tr></table>",
-    "status": "<span style=\"color: green;\">TAMAMLANDI</span>",
-    "date": "11/01/2026"
-}

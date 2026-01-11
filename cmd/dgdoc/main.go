@@ -124,8 +124,8 @@ Supported HTML:
 
 	// Apply all placeholders
 	for placeholder, val := range rawData {
-		placeholder = strings.TrimPrefix(placeholder, "{{")
-		placeholder = strings.TrimSuffix(placeholder, "}}")
+		placeholder = strings.TrimPrefix(placeholder, "{")
+		placeholder = strings.TrimSuffix(placeholder, "}")
 
 		// Convert value to string (supports int, float, bool, etc.)
 		var htmlContent string
@@ -139,7 +139,7 @@ Supported HTML:
 			fmt.Fprintf(os.Stderr, "Error setting content for '%s': %v\n", placeholder, err)
 			os.Exit(1)
 		}
-		fmt.Printf("✓ Replaced {{%s}}\n", placeholder)
+		fmt.Printf("✓ Replaced {%s}\n", placeholder)
 	}
 
 	// Save output

@@ -73,7 +73,7 @@ func (t *Template) initTracking() {
 		max := 0
 		for _, m := range matches {
 			var id int
-			fmt.Sscanf(m[1], "%d", &id)
+			_, _ = fmt.Sscanf(m[1], "%d", &id)
 			if id > max {
 				max = id
 			}
@@ -88,7 +88,7 @@ func (t *Template) initTracking() {
 	for name := range t.files {
 		if strings.HasPrefix(name, "word/media/image") {
 			var id int
-			fmt.Sscanf(strings.TrimPrefix(name, "word/media/image"), "%d", &id)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(name, "word/media/image"), "%d", &id)
 			if id > maxMedia {
 				maxMedia = id
 			}

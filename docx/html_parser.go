@@ -361,20 +361,8 @@ func countRowCells(tr *html.Node) int {
 	return count
 }
 
-func (t *Template) writeTableRow(n *html.Node, builder *strings.Builder, state *textState, colWidth int) {
-	builder.WriteString(`<w:tr>`)
-
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == html.ElementNode {
-			tag := strings.ToLower(c.Data)
-			if tag == "td" || tag == "th" {
-				t.writeTableCell(c, builder, state, tag == "th", colWidth)
-			}
-		}
-	}
-
-	builder.WriteString(`</w:tr>`)
-}
+// writeTableRow is deprecated - use writeTableRowWithMerge for all cases
+// Kept for backwards compatibility but not used
 
 // writeTableRowWithMerge handles rows with cell merging (rowspan tracking)
 func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder, state *textState, colWidth int, rowspanTracker map[int]int) {
@@ -419,9 +407,9 @@ func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder
 		rowspan := 1
 		for _, attr := range c.Attr {
 			if attr.Key == "colspan" {
-				fmt.Sscanf(attr.Val, "%d", &colspan)
+				_, _ = fmt.Sscanf(attr.Val, "%d", &colspan)
 			} else if attr.Key == "rowspan" {
-				fmt.Sscanf(attr.Val, "%d", &rowspan)
+				_, _ = fmt.Sscanf(attr.Val, "%d", &rowspan)
 			}
 		}
 
@@ -452,27 +440,8 @@ func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder
 	builder.WriteString(`</w:tr>`)
 }
 
-func (t *Template) writeTableCell(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int) {
-	builder.WriteString(`<w:tc>`)
-	builder.WriteString(fmt.Sprintf(`<w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>`, colWidth))
-
-	// Start paragraph in cell
-	builder.WriteString(`<w:p><w:pPr></w:pPr>`)
-
-	// If header, make text bold
-	cellState := state.copy()
-	if isHeader {
-		cellState.bold = true
-	}
-
-	// Process cell content
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		t.convertNode(c, builder, cellState)
-	}
-
-	builder.WriteString(`</w:p>`)
-	builder.WriteString(`</w:tc>`)
-}
+// writeTableCell is deprecated - use writeTableCellWithMerge for all cases
+// Kept for backwards compatibility but not used
 
 // writeTableCellWithMerge writes a table cell with merge properties
 func (t *Template) writeTableCellWithMerge(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int, colspan int, vMergeType string) {
@@ -760,7 +729,7 @@ func colorToHex(color string) string {
 
 func parseInt(s string) int {
 	var n int
-	fmt.Sscanf(s, "%d", &n)
+	_, _ = fmt.Sscanf(s, "%d", &n)
 	return n
 }
 

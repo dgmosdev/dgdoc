@@ -8,6 +8,8 @@ A high-performance Go library and CLI tool designed to dynamically populate DOCX
 
 ## Key Features
 
+- **Conditional Rendering**: Show/hide content based on data conditions using `{#if}`.
+- **Loop Support**: Repeat content for arrays with `{#items}` and access loop metadata.
 - **Dynamic Content Injection**: Seamlessly replace placeholders with rich HTML or plain text.
 - **Native Table Generation**: Automatically convert HTML tables into native Word table structures.
 - **Rich Text Formatting**: Full support for bold, italic, underline, lists, and headings.
@@ -73,6 +75,9 @@ dgdoc --template template.docx --json '{"content": "<h1>Hello</h1><p>World</p>"}
 
 # Mixed HTML and normal fields
 dgdoc --template template.docx --json '{"customer": "Ahmet Yılmaz", "address": "İstanbul, Türkiye", "content": "<h1>Title</h1><p>Body</p>"}'
+
+# With conditionals and loops
+dgdoc --template template.docx --json '{"premium": true, "items": [{"name": "Item1"}, {"name": "Item2"}]}'
 ```
 
 ### JSON Data Format
@@ -83,7 +88,12 @@ dgdoc --template template.docx --json '{"customer": "Ahmet Yılmaz", "address": 
   "address": "Atatürk Mah. No:1, İstanbul",
   "content": "<h1>Main Title</h1><p>Paragraph text</p>",
   "table_data": "<table><tr><td>Cell 1</td><td>Cell 2</td></tr></table>",
-  "status": "<span style=\"color: green;\">✓ Aktif</span>"
+  "status": "<span style=\"color: green;\">✓ Aktif</span>",
+  "premium": true,
+  "items": [
+    {"name": "Product A", "price": 100},
+    {"name": "Product B", "price": 200}
+  ]
 }
 ```
 
@@ -134,6 +144,107 @@ func main() {
         log.Fatal(err)
     }
 }
+```
+
+## Conditional Rendering & Loops
+
+dgdoc supports powerful template directives for dynamic content generation.
+
+### Conditional Rendering
+
+Use `{#if condition}...{/if}` to conditionally include content:
+
+**Template**:
+```
+Welcome, {#if premium}Premium{#else}Free{/if} User!
+```
+
+**Data**:
+```json
+{"premium": true}
+```
+
+**Output**: "Welcome, Premium User!"
+
+#### Supported Conditions
+
+- **Truthiness**: `{#if variable}` - checks if variable exists and is truthy
+- **Comparisons**: `age > 18`, `status == 'active'`, `price <= 100`
+- **Logical operators**: `age > 18 && active`, `premium || trial`
+- **Negation**: `!disabled`
+
+### Loops
+
+Use `{#arrayName}...{/arrayName}` to iterate over arrays:
+
+**Template**:
+```
+{#items}
+- {name}: {price}TL
+{/items}
+```
+
+**Data**:
+```json
+{
+  "items": [
+    {"name": "Product A", "price": 100},
+    {"name": "Product B", "price": 200}
+  ]
+}
+```
+
+**Output**:
+```
+- Product A: 100TL
+- Product B: 200TL
+```
+
+#### Loop Metadata
+
+Access special variables within loops:
+
+- `{@index}` - Current index (0-based)
+- `{@first}` - True for first iteration
+- `{@last}` - True for last iteration
+- `{@length}` - Total number of items
+
+**Example**:
+```
+{#items}
+{@index}. {name}{#if @last} (Last item){/if}
+{/items}
+```
+
+### Combined Example
+
+```go
+data := map[string]any{
+    "user": map[string]any{
+        "name": "Ahmet",
+        "premium": true,
+    },
+    "orders": []any{
+        map[string]any{"id": 1, "total": 150},
+        map[string]any{"id": 2, "total": 200},
+    },
+}
+
+template.Apply(data)
+```
+
+**Template**:
+```
+Hello {user.name}!
+
+{#if user.premium}
+Your orders:
+{#orders}
+- Order #{id}: {total}TL
+{/orders}
+{#else}
+Upgrade to premium to see your orders.
+{/if}
 ```
 
 ## Supported HTML

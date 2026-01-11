@@ -304,6 +304,9 @@ func (t *Template) writeTable(n *html.Node, builder *strings.Builder, state *tex
 	}
 	builder.WriteString(`</w:tblGrid>`)
 
+	// Track rowspan state: map[colIndex]remainingSpans
+	rowspanTracker := make(map[int]int)
+
 	// Process rows
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
@@ -311,11 +314,11 @@ func (t *Template) writeTable(n *html.Node, builder *strings.Builder, state *tex
 			if tag == "tbody" || tag == "thead" || tag == "tfoot" {
 				for tr := c.FirstChild; tr != nil; tr = tr.NextSibling {
 					if tr.Type == html.ElementNode && strings.ToLower(tr.Data) == "tr" {
-						t.writeTableRow(tr, builder, state, colWidth)
+						t.writeTableRowWithMerge(tr, builder, state, colWidth, rowspanTracker)
 					}
 				}
 			} else if tag == "tr" {
-				t.writeTableRow(c, builder, state, colWidth)
+				t.writeTableRowWithMerge(c, builder, state, colWidth, rowspanTracker)
 			}
 		}
 	}
@@ -373,6 +376,82 @@ func (t *Template) writeTableRow(n *html.Node, builder *strings.Builder, state *
 	builder.WriteString(`</w:tr>`)
 }
 
+// writeTableRowWithMerge handles rows with cell merging (rowspan tracking)
+func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder, state *textState, colWidth int, rowspanTracker map[int]int) {
+	builder.WriteString(`<w:tr>`)
+
+	colIdx := 0
+	cellIdx := 0
+
+	// Get all cells in this row first
+	cells := []*html.Node{}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			tag := strings.ToLower(c.Data)
+			if tag == "td" || tag == "th" {
+				cells = append(cells, c)
+			}
+		}
+	}
+
+	// Process each column position
+	for cellIdx < len(cells) || rowspanTracker[colIdx] > 0 {
+		// If this column is part of a rowspan from above, write continue cell
+		if rowspanTracker[colIdx] > 0 {
+			t.writeMergedCell(builder, colWidth, "continue")
+			colIdx++
+			continue
+		}
+
+		// No more cells to process
+		if cellIdx >= len(cells) {
+			break
+		}
+
+		// Process the next cell from HTML
+		c := cells[cellIdx]
+		cellIdx++
+
+		tag := strings.ToLower(c.Data)
+
+		// Get colspan and rowspan attributes
+		colspan := 1
+		rowspan := 1
+		for _, attr := range c.Attr {
+			if attr.Key == "colspan" {
+				fmt.Sscanf(attr.Val, "%d", &colspan)
+			} else if attr.Key == "rowspan" {
+				fmt.Sscanf(attr.Val, "%d", &rowspan)
+			}
+		}
+
+		// Write the cell with merge properties
+		vMergeType := ""
+		if rowspan > 1 {
+			vMergeType = "restart"
+			// Track this rowspan for future rows
+			for i := 0; i < colspan; i++ {
+				rowspanTracker[colIdx+i] = rowspan - 1
+			}
+		}
+
+		t.writeTableCellWithMerge(c, builder, state, tag == "th", colWidth, colspan, vMergeType)
+		colIdx += colspan
+	}
+
+	// Decrement all rowspan counters for this row
+	for col := range rowspanTracker {
+		if rowspanTracker[col] > 0 {
+			rowspanTracker[col]--
+			if rowspanTracker[col] == 0 {
+				delete(rowspanTracker, col)
+			}
+		}
+	}
+
+	builder.WriteString(`</w:tr>`)
+}
+
 func (t *Template) writeTableCell(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int) {
 	builder.WriteString(`<w:tc>`)
 	builder.WriteString(fmt.Sprintf(`<w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>`, colWidth))
@@ -392,6 +471,129 @@ func (t *Template) writeTableCell(n *html.Node, builder *strings.Builder, state 
 	}
 
 	builder.WriteString(`</w:p>`)
+	builder.WriteString(`</w:tc>`)
+}
+
+// writeTableCellWithMerge writes a table cell with merge properties
+func (t *Template) writeTableCellWithMerge(n *html.Node, builder *strings.Builder, state *textState, isHeader bool, colWidth int, colspan int, vMergeType string) {
+	builder.WriteString(`<w:tc>`)
+	builder.WriteString(`<w:tcPr>`)
+
+	// Set cell width (multiply by colspan)
+	totalWidth := colWidth * colspan
+	builder.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, totalWidth))
+
+	// Horizontal merge (colspan)
+	if colspan > 1 {
+		builder.WriteString(fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, colspan))
+	}
+
+	// Vertical merge (rowspan)
+	if vMergeType != "" {
+		builder.WriteString(fmt.Sprintf(`<w:vMerge w:val="%s"/>`, vMergeType))
+	}
+
+	// Apply cell styling from style attribute
+	t.applyTableCellStyling(n, builder)
+
+	builder.WriteString(`</w:tcPr>`)
+
+	// Start paragraph in cell
+	builder.WriteString(`<w:p><w:pPr></w:pPr>`)
+
+	// If header, make text bold
+	cellState := state.copy()
+	if isHeader {
+		cellState.bold = true
+	}
+
+	// Process cell content
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		t.convertNode(c, builder, cellState)
+	}
+
+	builder.WriteString(`</w:p>`)
+	builder.WriteString(`</w:tc>`)
+}
+
+// applyTableCellStyling applies styling from HTML style attribute to cell
+func (t *Template) applyTableCellStyling(n *html.Node, builder *strings.Builder) {
+	for _, attr := range n.Attr {
+		if attr.Key == "style" {
+			styles := parseStyle(attr.Val)
+
+			// Background color
+			if bgColor, ok := styles["background-color"]; ok {
+				hexColor := colorToHex(bgColor)
+				builder.WriteString(fmt.Sprintf(`<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, hexColor))
+			}
+
+			// Custom borders
+			hasBorder := false
+			if _, ok := styles["border"]; ok {
+				hasBorder = true
+			}
+			if _, ok := styles["border-top"]; ok {
+				hasBorder = true
+			}
+			if _, ok := styles["border-left"]; ok {
+				hasBorder = true
+			}
+			if _, ok := styles["border-bottom"]; ok {
+				hasBorder = true
+			}
+			if _, ok := styles["border-right"]; ok {
+				hasBorder = true
+			}
+
+			if hasBorder {
+				builder.WriteString(`<w:tcBorders>`)
+
+				// Parse border style (simplified - use single or double)
+				borderStyle := "single"
+				borderSize := "4"       // default thin
+				borderColor := "000000" // default black
+
+				if border, ok := styles["border"]; ok {
+					// Simple parsing: "2px solid red" -> extract width and color
+					parts := strings.Fields(border)
+					for _, part := range parts {
+						if strings.Contains(part, "px") {
+							width := strings.TrimSuffix(part, "px")
+							if w := parseInt(width); w > 2 {
+								borderSize = "8"
+							}
+						} else if part == "double" {
+							borderStyle = "double"
+						} else {
+							// Try as color
+							if hex := colorToHex(part); hex != "000000" || part == "black" {
+								borderColor = hex
+							}
+						}
+					}
+				}
+
+				borderXML := fmt.Sprintf(`<w:top w:val="%s" w:sz="%s" w:color="%s"/>`, borderStyle, borderSize, borderColor)
+				builder.WriteString(borderXML)
+				builder.WriteString(strings.Replace(borderXML, "top", "left", 1))
+				builder.WriteString(strings.Replace(borderXML, "top", "bottom", 1))
+				builder.WriteString(strings.Replace(borderXML, "top", "right", 1))
+
+				builder.WriteString(`</w:tcBorders>`)
+			}
+		}
+	}
+}
+
+// writeMergedCell writes an empty cell that continues a vertical merge
+func (t *Template) writeMergedCell(builder *strings.Builder, colWidth int, vMergeType string) {
+	builder.WriteString(`<w:tc>`)
+	builder.WriteString(`<w:tcPr>`)
+	builder.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, colWidth))
+	builder.WriteString(fmt.Sprintf(`<w:vMerge w:val="%s"/>`, vMergeType))
+	builder.WriteString(`</w:tcPr>`)
+	builder.WriteString(`<w:p><w:pPr></w:pPr></w:p>`)
 	builder.WriteString(`</w:tc>`)
 }
 

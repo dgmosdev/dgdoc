@@ -342,11 +342,32 @@ func (t *Template) ReplaceText(placeholder, text string) error {
 // that can be stringified (string, int, float, bool, etc.).
 // If a value is a string, it's processed as HTML (SetContent).
 // For other types, it's processed as plain text.
+//
+// This method also processes template directives like {#if} and {#items} loops
+// before applying regular placeholders.
 func (t *Template) Apply(data map[string]any) error {
+	// First, preprocess template directives (conditionals and loops)
+	docContent, ok := t.files["word/document.xml"]
+	if !ok {
+		return fmt.Errorf("document.xml not found in docx")
+	}
+
+	processedContent, err := PreprocessTemplate(string(docContent), data)
+	if err != nil {
+		return fmt.Errorf("template preprocessing failed: %w", err)
+	}
+	t.files["word/document.xml"] = []byte(processedContent)
+
+	// Then apply regular placeholders
 	for placeholder, val := range data {
 		// Clean placeholder name
 		placeholder = strings.TrimPrefix(placeholder, "{")
 		placeholder = strings.TrimSuffix(placeholder, "}")
+
+		// Skip special loop metadata variables
+		if strings.HasPrefix(placeholder, "@") {
+			continue
+		}
 
 		var htmlContent string
 		if s, ok := val.(string); ok {

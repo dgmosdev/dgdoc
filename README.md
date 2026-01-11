@@ -1,18 +1,20 @@
 # dgdoc
 
-**HTML to Word Document Generator** - A Go package that replaces placeholders in Word DOCX templates with rich HTML content.
+**Professional HTML to Word Generator**
+
+A high-performance Go library and CLI tool designed to dynamically populate DOCX templates with rich HTML content. **dgdoc** seamlessly converts HTML tables, lists, images, and styling into native Word elements, bridging the gap between web content and professional document reporting.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/dgmos/dgdoc.svg)](https://pkg.go.dev/github.com/dgmos/dgdoc)
 
-## Features
+## Key Features
 
-- 🔄 Replace `{placeholder}` values with HTML **or plain text** (normal fields)
-- 📊 Native Word tables from HTML `<table>`
-- 📝 Full text formatting (bold, italic, underline, strikethrough)
-- 🎨 Text and background colors via CSS styles
-- 📋 Bullet and numbered lists
-- 📑 Multiple placeholders support (mix HTML and plain text)
-- 💻 Use as CLI tool or Go library
+- **Dynamic Content Injection**: Seamlessly replace placeholders with rich HTML or plain text.
+- **Native Table Generation**: Automatically convert HTML tables into native Word table structures.
+- **Rich Text Formatting**: Full support for bold, italic, underline, lists, and headings.
+- **Visual Styling**: Apply custom text and background colors using standard CSS.
+- **Media & Assets**: Embed images (URL, Base64, local paths) and signatures effortlessly.
+- **Smart Hyperlinks**: Generate clickable, styled links from standard HTML `<a>` tags.
+- **Versatile Integration**: Available as a high-performance Go library and a standalone CLI tool.
 
 ## Installation
 

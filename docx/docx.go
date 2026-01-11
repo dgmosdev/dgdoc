@@ -85,17 +85,9 @@ func (t *Template) SetContent(placeholder, htmlContent string) error {
 	return nil
 }
 
-// replacePlaceholder handles the replacement of placeholders that may be split across XML runs
+// replacePlaceholder handles the replacement of placeholders.
+// It uses mergeSplitPlaceholder which effectively handles both single-run and multi-run placeholders.
 func replacePlaceholder(content, placeholder, replacement string) string {
-	fullPlaceholder := "{{" + placeholder + "}}"
-
-	// First try direct replacement
-	if strings.Contains(content, fullPlaceholder) {
-		return strings.ReplaceAll(content, fullPlaceholder, replacement)
-	}
-
-	// If not found, Word probably split the placeholder across multiple <w:t> elements
-	// We need to find and merge them using a more sophisticated approach
 	return mergeSplitPlaceholder(content, placeholder, replacement)
 }
 
@@ -122,8 +114,6 @@ func mergeSplitPlaceholder(content, placeholder, replacement string) string {
 	segments := make([]textSegment, 0, len(allMatches))
 
 	for _, match := range allMatches {
-		// match[0], match[1] = full match start/end
-		// match[2], match[3] = group 1 (text content) start/end
 		text := content[match[2]:match[3]]
 		textBuilder.WriteString(text)
 		segments = append(segments, textSegment{
@@ -166,63 +156,99 @@ func mergeSplitPlaceholder(content, placeholder, replacement string) string {
 		return content
 	}
 
-	// Find the nearest <w:r> or <w:p> boundary before the first segment
-	startPos := segments[startSegmentIdx].start
-	endPos := segments[endSegmentIdx].end
+	// Check if the replacement contains block-level elements
+	isBlockReplacement := strings.Contains(replacement, "<w:p") || strings.Contains(replacement, "<w:tbl")
 
-	contentBefore := content[:startPos]
-	contentAfter := content[endPos:]
+	if isBlockReplacement {
+		// Existing behavior: find and replace the whole container (paragraph or table)
+		startPos := segments[startSegmentIdx].start
+		endPos := segments[endSegmentIdx].end
 
-	// Check if we're inside a table cell
-	lastTcStart := strings.LastIndex(contentBefore, "<w:tc>")
-	lastTcEnd := strings.LastIndex(contentBefore, "</w:tc>")
-	insideTableCell := lastTcStart > lastTcEnd && lastTcStart != -1
+		contentBefore := content[:startPos]
+		contentAfter := content[endPos:]
 
-	var replaceStart, replaceEnd int
+		// Check if we're inside a table cell
+		lastTcStart := strings.LastIndex(contentBefore, "<w:tc>")
+		lastTcEnd := strings.LastIndex(contentBefore, "</w:tc>")
+		insideTableCell := lastTcStart > lastTcEnd && lastTcStart != -1
 
-	if insideTableCell {
-		// We're inside a table cell - find the containing table and replace it
-		lastTblStart := strings.LastIndex(contentBefore, "<w:tbl>")
-		if lastTblStart == -1 {
-			return content
+		var replaceStart, replaceEnd int
+
+		if insideTableCell {
+			lastTblStart := strings.LastIndex(contentBefore, "<w:tbl>")
+			if lastTblStart == -1 {
+				return content
+			}
+			tblEndIdx := strings.Index(contentAfter, "</w:tbl>")
+			if tblEndIdx == -1 {
+				return content
+			}
+			replaceStart = lastTblStart
+			replaceEnd = endPos + tblEndIdx + len("</w:tbl>")
+		} else {
+			pStartPattern := regexp.MustCompile(`<w:p>|<w:p\s[^>]*>`)
+			pStarts := pStartPattern.FindAllStringIndex(contentBefore, -1)
+			if len(pStarts) == 0 {
+				return content
+			}
+			replaceStart = pStarts[len(pStarts)-1][0]
+			pEndIdx := strings.Index(contentAfter, "</w:p>")
+			if pEndIdx == -1 {
+				return content
+			}
+			replaceEnd = endPos + pEndIdx + len("</w:p>")
 		}
-
-		// Find the end of this table
-		tblEndIdx := strings.Index(contentAfter, "</w:tbl>")
-		if tblEndIdx == -1 {
-			return content
-		}
-
-		replaceStart = lastTblStart
-		replaceEnd = endPos + tblEndIdx + len("</w:tbl>")
+		return content[:replaceStart] + replacement + content[replaceEnd:]
 	} else {
-		// We're in a regular paragraph - find and replace the paragraph
-		// IMPORTANT: Match <w:p> or <w:p ...> but NOT <w:pPr>, <w:pStyle> etc.
-		pStartPattern := regexp.MustCompile(`<w:p>|<w:p\s[^>]*>`)
-		pStarts := pStartPattern.FindAllStringIndex(contentBefore, -1)
+		// New behavior: Inline replacement
+		// Only replace the text inside the <w:t> elements
+		// We need to handle the fact that the placeholder might start/end mid-segment
 
-		if len(pStarts) == 0 {
-			return content
+		startSeg := segments[startSegmentIdx]
+		endSeg := segments[endSegmentIdx]
+
+		// Calculate relative positions in the first and last segments
+		var currentPos int
+		for i := 0; i < startSegmentIdx; i++ {
+			currentPos += segments[i].textEnd - segments[i].textStart
+		}
+		offsetInStart := placeholderIdx - currentPos
+
+		currentPos = 0
+		for i := 0; i < endSegmentIdx; i++ {
+			currentPos += segments[i].textEnd - segments[i].textStart
+		}
+		offsetInEnd := placeholderEndIdx - currentPos
+
+		// Rebuild the XML but replacing only the placeholder part
+		var result strings.Builder
+		result.WriteString(content[:startSeg.textStart+offsetInStart])
+
+		// If the replacement is just <w:t>text</w:t>, we only want the 'text' part
+		// because we are already inside a <w:t> or at least at a position where
+		// we expect text content.
+		// Actually, if we are doing inline replacement, we might want to replace
+		// the WHOLE sequence of <w:t> elements with the new OOXML snippet if it's multiple runs.
+		// But if it's just raw text wrapped in <w:t>, let's strip the <w:t> if we are injecting
+		// into an existing <w:t>.
+
+		// Let's be smart: if replacement starts with <w:r>, it's a full run.
+		// If it's just <w:t>, we can inject the text content.
+
+		cleanReplacement := replacement
+		if strings.HasPrefix(replacement, "<w:t") && strings.HasSuffix(replacement, "</w:t>") {
+			// Extract content from <w:t>
+			tMatch := regexp.MustCompile(`<w:t[^>]*>(.*)</w:t>`).FindStringSubmatch(replacement)
+			if len(tMatch) > 1 {
+				cleanReplacement = tMatch[1]
+			}
 		}
 
-		// Use the START of the opening tag (index 0), not the end
-		// This ensures we replace the entire <w:p>...</w:p> block
-		replaceStart = pStarts[len(pStarts)-1][0]
+		result.WriteString(cleanReplacement)
+		result.WriteString(content[endSeg.textStart+offsetInEnd:])
 
-		// Find the matching </w:p> for this paragraph
-		// We need to count nested paragraphs to find the correct closing tag
-		pEndIdx := strings.Index(contentAfter, "</w:p>")
-		if pEndIdx == -1 {
-			return content
-		}
-
-		replaceEnd = endPos + pEndIdx + len("</w:p>")
+		return result.String()
 	}
-
-	// Replace the container with the replacement content
-	result := content[:replaceStart] + replacement + content[replaceEnd:]
-
-	return result
 }
 
 // Save writes the modified document to the specified output path.

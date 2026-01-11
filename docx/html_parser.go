@@ -8,14 +8,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// HTMLToOOXML converts an HTML string into a Word Open XML (OOXML) snippet
-// suitable for insertion into a DOCX document.xml body.
 func HTMLToOOXML(htmlContent string) (string, error) {
-	// Wrap in a root element if needed
-	if !strings.HasPrefix(strings.TrimSpace(htmlContent), "<") {
-		htmlContent = "<p>" + htmlContent + "</p>"
-	}
-
 	// Parse the HTML
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {

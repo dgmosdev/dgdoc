@@ -90,7 +90,7 @@ Supported HTML:
 	}
 
 	// Parse data
-	var data map[string]string
+	var rawData map[string]any
 	if *dataPath != "" {
 		// Read from JSON file
 		content, err := os.ReadFile(*dataPath)
@@ -98,13 +98,13 @@ Supported HTML:
 			fmt.Fprintf(os.Stderr, "Error reading data file: %v\n", err)
 			os.Exit(1)
 		}
-		if err := json.Unmarshal(content, &data); err != nil {
+		if err := json.Unmarshal(content, &rawData); err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing JSON file: %v\n", err)
 			os.Exit(1)
 		}
 	} else if *dataJSON != "" {
 		// Parse inline JSON
-		if err := json.Unmarshal([]byte(*dataJSON), &data); err != nil {
+		if err := json.Unmarshal([]byte(*dataJSON), &rawData); err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing JSON: %v\n", err)
 			os.Exit(1)
 		}
@@ -123,9 +123,17 @@ Supported HTML:
 	defer template.Close()
 
 	// Apply all placeholders
-	for placeholder, htmlContent := range data {
+	for placeholder, val := range rawData {
 		placeholder = strings.TrimPrefix(placeholder, "{{")
 		placeholder = strings.TrimSuffix(placeholder, "}}")
+
+		// Convert value to string (supports int, float, bool, etc.)
+		var htmlContent string
+		if s, ok := val.(string); ok {
+			htmlContent = s
+		} else {
+			htmlContent = fmt.Sprintf("%v", val)
+		}
 
 		if err := template.SetContent(placeholder, htmlContent); err != nil {
 			fmt.Fprintf(os.Stderr, "Error setting content for '%s': %v\n", placeholder, err)

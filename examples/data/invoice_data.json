@@ -1,0 +1,32 @@
+{
+  "customer_name": "Acme Corporation",
+  "customer_email": "contact@acme.com",
+  "invoice_number": "INV-2026-001",
+  "invoice_date": "2026-01-11",
+  "premium": true,
+  "items": [
+    {
+      "description": "Premium Widget A",
+      "quantity": 10,
+      "unit_price": "99.99",
+      "total": "999.90"
+    },
+    {
+      "description": "Standard Widget B",
+      "quantity": 5,
+      "unit_price": "49.99",
+      "total": "249.95"
+    },
+    {
+      "description": "Deluxe Widget C",
+      "quantity": 3,
+      "unit_price": "149.99",
+      "total": "449.97"
+    }
+  ],
+  "subtotal": "1,699.82",
+  "tax_rate": "18%",
+  "tax_amount": "305.97",
+  "total": "2,005.79",
+  "notes": "<p><strong>Payment Terms:</strong> Net 30 days</p><p><em>Thank you for your business!</em></p>"
+}

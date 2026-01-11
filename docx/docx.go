@@ -359,7 +359,63 @@ func (t *Template) Apply(data map[string]any) error {
 			return fmt.Errorf("failed to apply %s: %w", placeholder, err)
 		}
 	}
+
+	// Cleanup remaining placeholders
+	return t.Cleanup()
+}
+
+// Cleanup removes any remaining placeholders from the document
+func (t *Template) Cleanup() error {
+	docContent, ok := t.files["word/document.xml"]
+	if !ok {
+		return nil
+	}
+	content := string(docContent)
+
+	// we need to find all unique placeholders effectively
+	placeholders := extractPlaceholders(content)
+
+	for _, p := range placeholders {
+		// Replace with empty string
+		content = replacePlaceholder(content, p, "")
+	}
+
+	t.files["word/document.xml"] = []byte(content)
 	return nil
+}
+
+func extractPlaceholders(content string) []string {
+	// Extract plain text to handle split placeholders
+	textPattern := regexp.MustCompile(`<w:t[^>]*>([^<]*)</w:t>`)
+	allMatches := textPattern.FindAllStringSubmatch(content, -1)
+
+	var textBuilder strings.Builder
+	for _, m := range allMatches {
+		textBuilder.WriteString(m[1])
+	}
+	fullText := textBuilder.String()
+
+	// Find all patterns looking like placeholders: {name}
+	// We support alphanumeric, underscores, hyphens, dots
+	// We do NOT include % because special placeholders like %image are usually handled or if not maybe should be kept?
+	// User said {example} so standard text placeholders.
+	// But if user has {%image} and didn't provide it, they probably want it gone too.
+	// So I will include % in the regex.
+	re := regexp.MustCompile(`\{([a-zA-Z0-9_%\-\.]+)\}`)
+	matches := re.FindAllStringSubmatch(fullText, -1)
+
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, m := range matches {
+		name := m[1]
+		if !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+
+	return result
 }
 
 func (t *Template) handleSpecialPlaceholder(placeholder, content string) (string, error) {

@@ -100,13 +100,42 @@ func TestApply_Special(t *testing.T) {
 	}
 
 	content := string(temp.files["word/document.xml"])
-	if !strings.Contains(content, "HYPERLINK") {
-		t.Errorf("Expected content to contain 'HYPERLINK', got: %s", content)
+	if !strings.Contains(content, "w:hyperlink") {
+		t.Errorf("Expected content to contain 'w:hyperlink', got: %s", content)
 	}
-	if !strings.Contains(content, "https://google.com") {
-		t.Errorf("Expected content to contain URL, got: %s", content)
-	}
+	// URL is in _rels, not document.xml so we don't check for it here
 	if !strings.Contains(content, "Google") {
 		t.Errorf("Expected content to contain text, got: %s", content)
+	}
+}
+
+func TestApply_MissingKeys(t *testing.T) {
+	// This test demonstrates the issue: missing keys leave placeholders
+	temp := &Template{
+		files: map[string][]byte{
+			"word/document.xml": []byte(`<w:p><w:t>{exists}</w:t></w:p><w:p><w:t>{missing}</w:t></w:p>`),
+		},
+	}
+
+	data := map[string]any{
+		"exists": "Found",
+		// "missing" is omitted
+	}
+
+	err := temp.Apply(data)
+	if err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	content := string(temp.files["word/document.xml"])
+	if !strings.Contains(content, "Found") {
+		t.Errorf("Expected content to contain 'Found'")
+	}
+
+	// This is what the user WANTS to happen (it should NOT contain {missing})
+	if strings.Contains(content, "{missing}") {
+		t.Errorf("Failed: Missing placeholder '{missing}' still exists in document.")
+	} else {
+		t.Logf("Success: {missing} was removed.")
 	}
 }

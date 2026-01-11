@@ -422,7 +422,7 @@ func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder
 			vMergeType = "restart"
 			// Track this rowspan for future rows
 			for i := 0; i < colspan; i++ {
-				rowspanTracker[colIdx+i] = rowspan - 1
+				rowspanTracker[colIdx+i] = rowspan
 			}
 		}
 

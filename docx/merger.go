@@ -46,7 +46,7 @@ func (t *Template) MergeDocuments(placeholders map[string]string) error {
 
 		// Replace the placeholder with the external content
 		content = strings.ReplaceAll(content, placeholder, externalContent)
-		externalDoc.Close()
+		_ = externalDoc.Close()
 	}
 
 	t.files["word/document.xml"] = []byte(content)
@@ -74,7 +74,7 @@ func extractBodyContent(zipFile *zip.ReadCloser) (string, error) {
 			}
 
 			content, err := io.ReadAll(rc)
-			rc.Close()
+			_ = rc.Close()
 			if err != nil {
 				return "", err
 			}
@@ -115,7 +115,7 @@ func (t *Template) IncludeHeader(headerPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open header document: %w", err)
 	}
-	defer externalDoc.Close()
+	defer func() { _ = externalDoc.Close() }()
 
 	// Find header file in external document
 	for _, f := range externalDoc.File {
@@ -126,7 +126,7 @@ func (t *Template) IncludeHeader(headerPath string) error {
 			}
 
 			content, err := io.ReadAll(rc)
-			rc.Close()
+			_ = rc.Close()
 			if err != nil {
 				return err
 			}
@@ -155,7 +155,7 @@ func (t *Template) IncludeFooter(footerPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open footer document: %w", err)
 	}
-	defer externalDoc.Close()
+	defer func() { _ = externalDoc.Close() }()
 
 	// Find footer file in external document
 	for _, f := range externalDoc.File {
@@ -166,7 +166,7 @@ func (t *Template) IncludeFooter(footerPath string) error {
 			}
 
 			content, err := io.ReadAll(rc)
-			rc.Close()
+			_ = rc.Close()
 			if err != nil {
 				return err
 			}

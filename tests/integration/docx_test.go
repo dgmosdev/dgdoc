@@ -65,7 +65,7 @@ func TestDOCXIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create temp output file
 			outputPath := filepath.Join(os.TempDir(), "test_output.docx")
-			defer os.Remove(outputPath)
+			defer func() { _ = os.Remove(outputPath) }()
 
 			// Open template (if it exists)
 			templatePath := filepath.Join(fixturesDir, tc.template)
@@ -77,7 +77,7 @@ func TestDOCXIntegration(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open template: %v", err)
 			}
-			defer template.Close()
+			defer func() { _ = template.Close() }()
 
 			// Apply data
 			if err := template.Apply(tc.data); err != nil {
@@ -105,7 +105,7 @@ func TestDOCXIntegration(t *testing.T) {
 func TestDOCXMetadata(t *testing.T) {
 	// Create a temporary test file
 	outputPath := filepath.Join(os.TempDir(), "metadata_test.docx")
-	defer os.Remove(outputPath)
+	defer func() { _ = os.Remove(outputPath) }()
 
 	// Since we need a real DOCX to start with, we'll skip if no fixtures
 	fixturesDir := filepath.Join("..", "fixtures")
@@ -119,7 +119,7 @@ func TestDOCXMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open template: %v", err)
 	}
-	defer template.Close()
+	defer func() { _ = template.Close() }()
 
 	// Set metadata
 	meta := docx.Metadata{

@@ -34,7 +34,7 @@ func TestPPTXIntegration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			outputPath := filepath.Join(os.TempDir(), "test_pptx_output.pptx")
-			defer os.Remove(outputPath)
+			defer func() { _ = os.Remove(outputPath) }()
 
 			templatePath := filepath.Join(fixturesDir, tc.template)
 			if _, err := os.Stat(templatePath); os.IsNotExist(err) {
@@ -45,7 +45,7 @@ func TestPPTXIntegration(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open template: %v", err)
 			}
-			defer template.Close()
+			defer func() { _ = template.Close() }()
 
 			if err := template.Apply(tc.data); err != nil {
 				t.Fatalf("Failed to apply data: %v", err)

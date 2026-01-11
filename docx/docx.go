@@ -45,14 +45,14 @@ func Open(path string) (*Template, error) {
 	for _, f := range r.File {
 		rc, err := f.Open()
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, fmt.Errorf("failed to read file %s: %w", f.Name, err)
 		}
 
 		content, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, fmt.Errorf("failed to read content of %s: %w", f.Name, err)
 		}
 
@@ -189,7 +189,7 @@ func mergeSplitPlaceholder(content, placeholder, replacement string) string {
 		placeholderEndIdx := placeholderIdx + len(fullPlaceholder)
 
 		// Find which segments contain the placeholder
-		var startSegmentIdx, endSegmentIdx int = -1, -1
+		var startSegmentIdx, endSegmentIdx = -1, -1
 		var charPos int
 
 		for i, seg := range segments {
@@ -296,11 +296,11 @@ func (t *Template) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	// Create a new zip writer
 	w := zip.NewWriter(outFile)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	// Write all files
 	for name, content := range t.files {
@@ -463,6 +463,9 @@ func (t *Template) handleSpecialPlaceholder(placeholder, content string) (string
 				return "", fmt.Errorf("invalid base64 image")
 			}
 			imgData, err = base64.StdEncoding.DecodeString(parts[1])
+			if err != nil {
+				return "", fmt.Errorf("failed to decode base64 image: %w", err)
+			}
 			ext = ".png" // Default, could be more specific
 		} else if strings.HasPrefix(content, "http") {
 			// Handle URL
@@ -470,17 +473,19 @@ func (t *Template) handleSpecialPlaceholder(placeholder, content string) (string
 			if err != nil {
 				return "", fmt.Errorf("failed to download image: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			imgData, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return "", fmt.Errorf("failed to read image data: %w", err)
+			}
 			ext = filepath.Ext(content)
 		} else {
 			// Handle local file
 			imgData, err = os.ReadFile(content)
+			if err != nil {
+				return "", fmt.Errorf("failed to read image file: %w", err)
+			}
 			ext = filepath.Ext(content)
-		}
-
-		if err != nil {
-			return "", err
 		}
 
 		rId, err := t.addImage(imgData, ext)

@@ -35,14 +35,14 @@ func Open(path string) (*Template, error) {
 	for _, f := range r.File {
 		rc, err := f.Open()
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, fmt.Errorf("failed to read file %s: %w", f.Name, err)
 		}
 
 		fileContent, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, fmt.Errorf("failed to read content of %s: %w", f.Name, err)
 		}
 
@@ -55,7 +55,7 @@ func Open(path string) (*Template, error) {
 	}
 
 	if t.content == nil {
-		r.Close()
+		_ = r.Close()
 		return nil, fmt.Errorf("content.xml not found in ODT file")
 	}
 
@@ -114,10 +114,10 @@ func (t *Template) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	w := zip.NewWriter(outFile)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	// Write all files
 	for name, content := range t.files {

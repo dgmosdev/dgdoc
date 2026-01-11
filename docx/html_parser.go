@@ -212,14 +212,14 @@ func writeText(builder *strings.Builder, text string, state *textState) {
 			builder.WriteString(`<w:strike/>`)
 		}
 		if state.fontSize != "" {
-			builder.WriteString(fmt.Sprintf(`<w:sz w:val="%s"/><w:szCs w:val="%s"/>`, state.fontSize, state.fontSize))
+			fmt.Fprintf(builder, `<w:sz w:val="%s"/><w:szCs w:val="%s"/>`, state.fontSize, state.fontSize)
 		}
 		if state.fontColor != "" {
-			builder.WriteString(fmt.Sprintf(`<w:color w:val="%s"/>`, state.fontColor))
+			fmt.Fprintf(builder, `<w:color w:val="%s"/>`, state.fontColor)
 		}
 		if state.bgColor != "" {
 			// w:shd is used for background/highlight color in Word
-			builder.WriteString(fmt.Sprintf(`<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, state.bgColor))
+			fmt.Fprintf(builder, `<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, state.bgColor)
 		}
 		builder.WriteString(`</w:rPr>`)
 	}
@@ -229,9 +229,9 @@ func writeText(builder *strings.Builder, text string, state *textState) {
 
 	// Preserve spaces
 	if strings.HasPrefix(text, " ") || strings.HasSuffix(text, " ") {
-		builder.WriteString(fmt.Sprintf(`<w:t xml:space="preserve">%s</w:t>`, text))
+		fmt.Fprintf(builder, `<w:t xml:space="preserve">%s</w:t>`, text)
 	} else {
-		builder.WriteString(fmt.Sprintf(`<w:t>%s</w:t>`, text))
+		fmt.Fprintf(builder, `<w:t>%s</w:t>`, text)
 	}
 
 	builder.WriteString(`</w:r>`)
@@ -245,7 +245,7 @@ func (t *Template) writeListItem(n *html.Node, builder *strings.Builder, state *
 
 	// Add list formatting
 	builder.WriteString(`<w:pStyle w:val="ListParagraph"/>`)
-	builder.WriteString(fmt.Sprintf(`<w:numPr><w:ilvl w:val="%d"/>`, state.listLevel-1))
+	fmt.Fprintf(builder, `<w:numPr><w:ilvl w:val="%d"/>`, state.listLevel-1)
 
 	// Use different numId for ordered vs unordered
 	if state.listType == "ol" {
@@ -257,7 +257,7 @@ func (t *Template) writeListItem(n *html.Node, builder *strings.Builder, state *
 
 	// Add indentation
 	indent := state.listLevel * 720 // 720 twips = 0.5 inch
-	builder.WriteString(fmt.Sprintf(`<w:ind w:left="%d" w:hanging="360"/>`, indent))
+	fmt.Fprintf(builder, `<w:ind w:left="%d" w:hanging="360"/>`, indent)
 
 	builder.WriteString(`</w:pPr>`)
 
@@ -265,7 +265,7 @@ func (t *Template) writeListItem(n *html.Node, builder *strings.Builder, state *
 	if state.listType == "ul" {
 		builder.WriteString(`<w:r><w:rPr></w:rPr><w:t>• </w:t></w:r>`)
 	} else {
-		builder.WriteString(fmt.Sprintf(`<w:r><w:rPr></w:rPr><w:t>%d. </w:t></w:r>`, state.listNum))
+		fmt.Fprintf(builder, `<w:r><w:rPr></w:rPr><w:t>%d. </w:t></w:r>`, state.listNum)
 	}
 
 	// Process children
@@ -300,7 +300,7 @@ func (t *Template) writeTable(n *html.Node, builder *strings.Builder, state *tex
 	builder.WriteString(`<w:tblGrid>`)
 	colWidth := 9000 / colCount // Distribute width evenly (9000 twips ≈ full page)
 	for i := 0; i < colCount; i++ {
-		builder.WriteString(fmt.Sprintf(`<w:gridCol w:w="%d"/>`, colWidth))
+		fmt.Fprintf(builder, `<w:gridCol w:w="%d"/>`, colWidth)
 	}
 	builder.WriteString(`</w:tblGrid>`)
 
@@ -311,13 +311,14 @@ func (t *Template) writeTable(n *html.Node, builder *strings.Builder, state *tex
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
 			tag := strings.ToLower(c.Data)
-			if tag == "tbody" || tag == "thead" || tag == "tfoot" {
+			switch tag {
+			case "tbody", "thead", "tfoot":
 				for tr := c.FirstChild; tr != nil; tr = tr.NextSibling {
 					if tr.Type == html.ElementNode && strings.ToLower(tr.Data) == "tr" {
 						t.writeTableRowWithMerge(tr, builder, state, colWidth, rowspanTracker)
 					}
 				}
-			} else if tag == "tr" {
+			case "tr":
 				t.writeTableRowWithMerge(c, builder, state, colWidth, rowspanTracker)
 			}
 		}
@@ -331,13 +332,14 @@ func countTableColumns(n *html.Node) int {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
 			tag := strings.ToLower(c.Data)
-			if tag == "tbody" || tag == "thead" || tag == "tfoot" {
+			switch tag {
+			case "tbody", "thead", "tfoot":
 				for tr := c.FirstChild; tr != nil; tr = tr.NextSibling {
 					if tr.Type == html.ElementNode && strings.ToLower(tr.Data) == "tr" {
 						return countRowCells(tr)
 					}
 				}
-			} else if tag == "tr" {
+			case "tr":
 				return countRowCells(c)
 			}
 		}
@@ -406,9 +408,10 @@ func (t *Template) writeTableRowWithMerge(n *html.Node, builder *strings.Builder
 		colspan := 1
 		rowspan := 1
 		for _, attr := range c.Attr {
-			if attr.Key == "colspan" {
+			switch attr.Key {
+			case "colspan":
 				_, _ = fmt.Sscanf(attr.Val, "%d", &colspan)
-			} else if attr.Key == "rowspan" {
+			case "rowspan":
 				_, _ = fmt.Sscanf(attr.Val, "%d", &rowspan)
 			}
 		}
@@ -450,16 +453,16 @@ func (t *Template) writeTableCellWithMerge(n *html.Node, builder *strings.Builde
 
 	// Set cell width (multiply by colspan)
 	totalWidth := colWidth * colspan
-	builder.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, totalWidth))
+	fmt.Fprintf(builder, `<w:tcW w:w="%d" w:type="dxa"/>`, totalWidth)
 
 	// Horizontal merge (colspan)
 	if colspan > 1 {
-		builder.WriteString(fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, colspan))
+		fmt.Fprintf(builder, `<w:gridSpan w:val="%d"/>`, colspan)
 	}
 
 	// Vertical merge (rowspan)
 	if vMergeType != "" {
-		builder.WriteString(fmt.Sprintf(`<w:vMerge w:val="%s"/>`, vMergeType))
+		fmt.Fprintf(builder, `<w:vMerge w:val="%s"/>`, vMergeType)
 	}
 
 	// Apply cell styling from style attribute
@@ -494,7 +497,7 @@ func (t *Template) applyTableCellStyling(n *html.Node, builder *strings.Builder)
 			// Background color
 			if bgColor, ok := styles["background-color"]; ok {
 				hexColor := colorToHex(bgColor)
-				builder.WriteString(fmt.Sprintf(`<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, hexColor))
+				fmt.Fprintf(builder, `<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, hexColor)
 			}
 
 			// Custom borders
@@ -559,8 +562,8 @@ func (t *Template) applyTableCellStyling(n *html.Node, builder *strings.Builder)
 func (t *Template) writeMergedCell(builder *strings.Builder, colWidth int, vMergeType string) {
 	builder.WriteString(`<w:tc>`)
 	builder.WriteString(`<w:tcPr>`)
-	builder.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, colWidth))
-	builder.WriteString(fmt.Sprintf(`<w:vMerge w:val="%s"/>`, vMergeType))
+	fmt.Fprintf(builder, `<w:tcW w:w="%d" w:type="dxa"/>`, colWidth)
+	fmt.Fprintf(builder, `<w:vMerge w:val="%s"/>`, vMergeType)
 	builder.WriteString(`</w:tcPr>`)
 	builder.WriteString(`<w:p><w:pPr></w:pPr></w:p>`)
 	builder.WriteString(`</w:tc>`)
@@ -578,7 +581,7 @@ func (t *Template) writeHeading(n *html.Node, builder *strings.Builder, state *t
 	}
 
 	builder.WriteString(`<w:p><w:pPr>`)
-	builder.WriteString(fmt.Sprintf(`<w:pStyle w:val="Heading%s"/>`, tag[1:]))
+	fmt.Fprintf(builder, `<w:pStyle w:val="Heading%s"/>`, tag[1:])
 	builder.WriteString(`</w:pPr>`)
 
 	headingState := state.copy()

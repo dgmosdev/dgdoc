@@ -47,9 +47,10 @@ func ValidatePlaceholders(content string) []ValidationError {
 	// Check for unmatched braces
 	openCount := 0
 	for i, char := range content {
-		if char == '{' {
+		switch char {
+		case '{':
 			openCount++
-		} else if char == '}' {
+		case '}':
 			openCount--
 			if openCount < 0 {
 				errors = append(errors, ValidationError{

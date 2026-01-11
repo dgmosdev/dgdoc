@@ -120,7 +120,7 @@ Supported HTML:
 		fmt.Fprintf(os.Stderr, "Error opening template: %v\n", err)
 		os.Exit(1)
 	}
-	defer template.Close()
+	defer func() { _ = template.Close() }()
 
 	// Apply all placeholders
 	for placeholder, val := range rawData {

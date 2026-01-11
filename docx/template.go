@@ -141,7 +141,7 @@ func replaceConditionalBlock(xmlContent, textContent string, textStart, textEnd 
 
 	// Build character position map
 	charPos := 0
-	var startXMLPos, endXMLPos int = -1, -1
+	var startXMLPos, endXMLPos = -1, -1
 
 	for _, match := range matches {
 		text := xmlContent[match[2]:match[3]]

@@ -22,6 +22,14 @@
 go install github.com/dgmos/dgdoc/cmd/dgdoc@latest
 ```
 
+### Direct Download (Windows, macOS, Linux)
+
+If you don't have Go installed, you can download the latest pre-built binaries from the [GitHub Releases](https://github.com/dgmos/dgdoc/releases) page.
+
+1. Download the archive for your operating system.
+2. Extract the `dgdoc` (or `dgdoc.exe`) binary.
+3. Move it to a folder in your system PATH (e.g., `/usr/local/bin` on macOS/Linux or a custom folder added to PATH on Windows).
+
 ### As Library
 
 ```bash

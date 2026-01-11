@@ -53,3 +53,30 @@ func TestEscapeXML(t *testing.T) {
 		t.Errorf("Expected %s, got %s", expected, result)
 	}
 }
+
+func TestApply(t *testing.T) {
+	// We need to mock document.xml for this test
+	temp := &Template{
+		files: map[string][]byte{
+			"word/document.xml": []byte(`<w:p><w:t>{{name}}</w:t></w:p><w:p><w:t>{{age}}</w:t></w:p>`),
+		},
+	}
+
+	data := map[string]any{
+		"name": "Ahmet",
+		"age":  30,
+	}
+
+	err := temp.Apply(data)
+	if err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	content := string(temp.files["word/document.xml"])
+	if !strings.Contains(content, "Ahmet") {
+		t.Errorf("Expected content to contain 'Ahmet', got: %s", content)
+	}
+	if !strings.Contains(content, "30") {
+		t.Errorf("Expected content to contain '30', got: %s", content)
+	}
+}

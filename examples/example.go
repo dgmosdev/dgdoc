@@ -9,13 +9,11 @@ import (
 
 func main() {
 	// Open template
-	template, err := docx.Open("template.docx")
+	template, err := docx.Open("examples/input.docx")
 	if err != nil {
 		log.Fatalf("Failed to open template: %v", err)
 	}
 	defer template.Close()
-
-	// Replace multiple placeholders with HTML content
 
 	// Main content with full HTML support
 	mainContent := `
@@ -37,17 +35,19 @@ func main() {
 			<tr><td>Test</td><td><span style="background-color: lightyellow;">Devam Ediyor</span></td><td>20/01/2026</td></tr>
 		</table>
 	`
-	template.SetContent("content", mainContent)
 
-	// Normal fields (plain text)
-	template.ReplaceText("customer_name", "Ahmet Can Bilgay")
-	template.ReplaceText("address", "Atatürk Mah. Marmara Sok. No:5, Ümraniye, İstanbul")
+	// Replace multiple placeholders at once using Apply
+	data := map[string]any{
+		"customer_name": "Ahmet Can Bilgay",
+		"address":       "Atatürk Mah. Marmara Sok. No:5, Ümraniye, İstanbul",
+		"date":          "<strong>11 Ocak 2026</strong>",
+		"status":        `<span style="color: white; background-color: green;"> AKTİF </span>`,
+		"content":       mainContent,
+	}
 
-	// Date in bold using SetContent
-	template.SetContent("date", `<strong>11 Ocak 2026</strong>`)
-
-	// Status indicator using SetContent
-	template.SetContent("status", `<span style="color: white; background-color: green;"> AKTİF </span>`)
+	if err := template.Apply(data); err != nil {
+		log.Fatalf("Failed to apply data: %v", err)
+	}
 
 	// Save
 	if err := template.Save("output.docx"); err != nil {

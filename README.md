@@ -71,24 +71,20 @@ func main() {
     }
     defer template.Close()
 
-    // Replace placeholders with HTML
-    html := `
-        <h1>Report Title</h1>
-        <p>This is <strong>bold</strong> and <em>italic</em> text.</p>
-        <ul>
-            <li>Item 1</li>
-            <li>Item 2</li>
-        </ul>
-        <table>
-            <tr><th>Name</th><th>Value</th></tr>
-            <tr><td>A</td><td>100</td></tr>
-        </table>
-    `
-    template.SetContent("content", html)
+    // Prepare data (supports HTML or plain text)
+    data := map[string]any{
+        "content": `
+            <h1>Report</h1>
+            <p>This is <strong>bold</strong> text.</p>
+        `,
+        "author": "<span style='color: blue;'>John Doe</span>",
+        "date":   "2024-01-15", // Plain text
+    }
 
-    // Multiple placeholders
-    template.SetContent("author", "<span style='color: blue;'>John Doe</span>")
-    template.SetContent("date", "<strong>2024-01-15</strong>")
+    // Apply all placeholders at once
+    if err := template.Apply(data); err != nil {
+        log.Fatal(err)
+    }
 
     // Save output
     template.Save("output.docx")
@@ -145,6 +141,9 @@ Best regards,
 
 ### `docx.Open(path string) (*Template, error)`
 Opens a DOCX template file.
+
+### `template.Apply(data map[string]any) error`
+Replaces multiple placeholders at once. Useful for batch updates.
 
 ### `template.SetContent(placeholder, html string) error`
 Replaces `{{placeholder}}` with converted HTML content.

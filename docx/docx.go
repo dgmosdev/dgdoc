@@ -300,6 +300,31 @@ func (t *Template) ReplaceText(placeholder, text string) error {
 	return nil
 }
 
+// Apply replaces multiple placeholders in the document using a map.
+// Keys are placeholder names (without braces), and values can be any type
+// that can be stringified (string, int, float, bool, etc.).
+// If a value is a string, it's processed as HTML (SetContent).
+// For other types, it's processed as plain text.
+func (t *Template) Apply(data map[string]any) error {
+	for placeholder, val := range data {
+		// Clean placeholder name
+		placeholder = strings.TrimPrefix(placeholder, "{{")
+		placeholder = strings.TrimSuffix(placeholder, "}}")
+
+		var htmlContent string
+		if s, ok := val.(string); ok {
+			htmlContent = s
+		} else {
+			htmlContent = fmt.Sprintf("%v", val)
+		}
+
+		if err := t.SetContent(placeholder, htmlContent); err != nil {
+			return fmt.Errorf("failed to apply %s: %w", placeholder, err)
+		}
+	}
+	return nil
+}
+
 func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")

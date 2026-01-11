@@ -1,4 +1,4 @@
-module github.com/dgmos/dgdoc
+module github.com/dgmosdev/dgdoc
 
 go 1.24.0
 

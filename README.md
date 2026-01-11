@@ -4,7 +4,7 @@
 
 A high-performance Go library and CLI tool designed to dynamically populate DOCX templates with rich HTML content. **dgdoc** seamlessly converts HTML tables, lists, images, and styling into native Word elements, bridging the gap between web content and professional document reporting.
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/dgmos/dgdoc.svg)](https://pkg.go.dev/github.com/dgmos/dgdoc)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dgmosdev/dgdoc.svg)](https://pkg.go.dev/github.com/dgmosdev/dgdoc)
 
 ## Key Features
 
@@ -21,12 +21,12 @@ A high-performance Go library and CLI tool designed to dynamically populate DOCX
 ### As CLI Tool
 
 ```bash
-go install github.com/dgmos/dgdoc/cmd/dgdoc@latest
+go install github.com/dgmosdev/dgdoc/cmd/dgdoc@latest
 ```
 
 ### Direct Download (Pre-built Binaries)
 
-If you don't have Go installed, you can download the latest pre-built binaries from the [GitHub Releases](https://github.com/dgmos/dgdoc/releases) page.
+If you don't have Go installed, you can download the latest pre-built binaries from the [GitHub Releases](https://github.com/dgmosdev/dgdoc/releases) page.
 
 #### Windows
 1. Download `dgdoc_windows_amd64.zip`.
@@ -59,7 +59,7 @@ If you don't have Go installed, you can download the latest pre-built binaries f
 ### As Library
 
 ```bash
-go get github.com/dgmos/dgdoc
+go get github.com/dgmosdev/dgdoc
 ```
 
 ## CLI Usage
@@ -94,7 +94,7 @@ package main
 
 import (
     "log"
-    "github.com/dgmos/dgdoc/docx"
+    "github.com/dgmosdev/dgdoc/docx"
 )
 
 func main() {

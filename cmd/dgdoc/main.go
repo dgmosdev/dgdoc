@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dgmos/dgdoc/docx"
+	"github.com/dgmosdev/dgdoc/docx"
 )
 
 var (

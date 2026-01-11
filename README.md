@@ -103,23 +103,34 @@ func main() {
     }
     defer template.Close()
 
-    // Prepare data (supports HTML or plain text)
+    // Prepare data
     data := map[string]any{
-        "content": `
-            <h1>Report</h1>
-            <p>This is <strong>bold</strong> text.</p>
+        "customer_name": "Antigravity Tech Corp",
+        "description": `
+            <h1>Project Report</h1>
+            <p>This document includes <span style="color: blue">rich content</span>.</p>
+            <ul>
+                <li>HTML Support</li>
+                <li>Image Embedding</li>
+            </ul>
         `,
-        "author": "<span style='color: blue;'>John Doe</span>",
-        "date":   "2024-01-15", // Plain text
+        // Special Syntax for Images
+        "%signature": "https://example.com/signature.png",
+        
+        // Special Syntax for Links
+        "%website": "Visit Website|https://example.com",
     }
 
     // Apply all placeholders at once
+    // Note: Replaces ALL occurrences of a placeholder in the document
     if err := template.Apply(data); err != nil {
         log.Fatal(err)
     }
 
     // Save output
-    template.Save("output.docx")
+    if err := template.Save("output.docx"); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 

@@ -1,0 +1,8 @@
+{
+  "title": "<h1>Örnek Rapor</h1>",
+  "content": "<p>Bu bir <strong>örnek içerik</strong> paragrafıdır.</p><p>İkinci paragraf <em>italik</em> ve <u>altı çizili</u> metin içerir.</p>",
+  "table": "<table><tr><th>Ad</th><th>Değer</th></tr><tr><td>Ürün A</td><td>100 ₺</td></tr><tr><td>Ürün B</td><td>250 ₺</td></tr></table>",
+  "status": "<span style=\"color: green;\">✓ Aktif</span>",
+  "author": "<span style=\"color: blue;\">Ahmet Yılmaz</span>",
+  "date": "<strong>11/01/2026</strong>"
+}

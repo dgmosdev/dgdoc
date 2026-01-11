@@ -8,6 +8,7 @@ A high-performance Go library and CLI tool designed to dynamically populate DOCX
 
 ## Key Features
 
+### 📝 DOCX (Word) Support
 - **Conditional Rendering**: Show/hide content based on data conditions using `{#if}`.
 - **Loop Support**: Repeat content for arrays with `{#items}` and access loop metadata.
 - **Dynamic Content Injection**: Seamlessly replace placeholders with rich HTML or plain text.
@@ -16,7 +17,30 @@ A high-performance Go library and CLI tool designed to dynamically populate DOCX
 - **Visual Styling**: Apply custom text and background colors using standard CSS.
 - **Media & Assets**: Embed images (URL, Base64, local paths) and signatures effortlessly.
 - **Smart Hyperlinks**: Generate clickable, styled links from standard HTML `<a>` tags.
+- **Subtemplates**: Merge external DOCX files with `{@include:filename.docx}`.
+- **Chart Detection**: Detect and count charts in documents.
+- **Document Metadata**: Set properties (title, author, keywords) and page setup (margins, size).
+
+### 📗 XLSX (Excel) Support
+- **Cell Placeholders**: Replace placeholders in Excel cells.
+- **Formula Preservation**: Automatically skip cells containing formulas to prevent breaking calculations.
+- **Loop Support**: Duplicate rows for array data with `{#items}...{/items}`.
+- **HTML Conversion**: Convert HTML content to plain text for cells.
+
+### 📘 PPTX (PowerPoint) Support
+- **Slide Placeholders**: Replace text placeholders in PowerPoint slides.
+- **Content Duplication**: Duplicate slide content sections for array data.
+- **HTML Conversion**: Insert HTML content (tags stripped) into slides.
+
+### 📙 ODT (OpenDocument) Support
+- **Text Replacement**: Replace placeholders in ODT documents.
+- **Full Loop Support**: Iterate over arrays in OpenDocument format.
+- **HTML Conversion**: Convert HTML to plain text for ODT files.
+
+### 🔧 Developer Tools
 - **Versatile Integration**: Available as a high-performance Go library and a standalone CLI tool.
+- **Consistent API**: Same interface across all document formats (DOCX, XLSX, PPTX, ODT).
+- **Comprehensive Testing**: 22 unit tests covering all modules.
 
 ## Installation
 
@@ -331,6 +355,223 @@ Saves the modified document.
 
 ### `template.Close() error`
 Closes the template and releases resources.
+
+---
+
+## Multi-Format Support
+
+dgdoc now supports multiple document formats beyond DOCX!
+
+### Excel (XLSX) Templates
+
+```go
+import "github.com/dgmosdev/dgdoc/xlsx"
+
+// Open Excel template
+template, _ := xlsx.Open("template.xlsx")
+defer template.Close()
+
+// Replace cell values
+template.SetCellValue("company_name", "Acme Corp")
+template.SetCellValue("revenue", "1,000,000")
+
+// Apply batch data
+data := map[string]any{
+    "name": "Q1 Report",
+    "date": "2026-01-11",
+}
+template.Apply(data)
+
+// Loop support - duplicate rows
+loopData := map[string]any{
+    "items": []any{
+        map[string]any{"product": "Widget A", "sales": "500"},
+        map[string]any{"product": "Widget B", "sales": "750"},
+    },
+}
+template.ProcessLoops(loopData)
+
+template.Save("output.xlsx")
+```
+
+**Features:**
+- ✅ Formula preservation (formulas are not replaced)
+- ✅ Supports both text and numeric cells
+- ✅ HTML content (basic tag stripping)
+- ✅ Loop support for row duplication
+
+---
+
+### PowerPoint (PPTX) Templates
+
+```go
+import "github.com/dgmosdev/dgdoc/pptx"
+
+// Open PowerPoint template
+template, _ := pptx.Open("template.pptx")
+defer template.Close()
+
+// Replace text in slides
+template.SetTextValue("title", "Q1 Presentation")
+template.SetTextValue("subtitle", "2026 Report")
+
+// Apply batch data
+data := map[string]any{
+    "presenter": "John Doe",
+    "date": "January 11, 2026",
+}
+template.Apply(data)
+
+// Loop support - duplicate slide content
+loopData := map[string]any{
+    "slides": []any{
+        map[string]any{"topic": "Revenue", "amount": "$1M"},
+        map[string]any{"topic": "Growth", "amount": "25%"},
+    },
+}
+template.ProcessLoops(loopData)
+
+template.Save("output.pptx")
+```
+
+**Features:**
+- ✅ Text placeholder replacement in slides
+- ✅ HTML content support
+- ✅ Loop support for content duplication
+
+---
+
+### OpenDocument (ODT) Templates
+
+```go
+import "github.com/dgmosdev/dgdoc/odt"
+
+// Open ODT template
+template, _ := odt.Open("template.odt")
+defer template.Close()
+
+// Replace text
+template.SetTextValue("title", "Document Title")
+
+// Apply batch data
+data := map[string]any{
+    "author": "Jane Smith",
+    "content": "<b>Bold text</b> and normal text",
+}
+template.Apply(data)
+
+// Loop support
+loopData := map[string]any{
+    "sections": []any{
+        map[string]any{"heading": "Section 1"},
+        map[string]any{"heading": "Section 2"},
+    },
+}
+template.ProcessLoops(loopData)
+
+template.Save("output.odt")
+```
+
+**Features:**
+- ✅ Supports paragraphs, spans, and headings
+- ✅ HTML content support
+- ✅ Loop support
+
+---
+
+## Advanced DOCX Features
+
+### Document Merging (Subtemplates)
+
+Merge external DOCX files into your main document:
+
+**Template** (`main.docx`):
+```
+Company Report
+
+{@include:header.docx}
+
+Main content here...
+
+{@include:footer.docx}
+```
+
+**Code**:
+```go
+template, _ := docx.Open("main.docx")
+
+// Specify paths to external files
+includes := map[string]string{
+    "header.docx": "./templates/header.docx",
+    "footer.docx": "./templates/footer.docx",
+}
+
+template.MergeDocuments(includes)
+template.Save("output.docx")
+```
+
+### Chart Detection
+
+Detect and count charts in your documents:
+
+```go
+template, _ := docx.Open("report.docx")
+
+// Detect all charts
+charts, _ := template.DetectCharts()
+fmt.Printf("Found %d charts\n", len(charts))
+
+// Check if document has charts
+if template.HasCharts() {
+    count := template.GetChartCount()
+    fmt.Printf("Document contains %d charts\n", count)
+}
+```
+
+### Document Metadata
+
+Set document properties and page setup:
+
+```go
+template, _ := docx.Open("document.docx")
+
+// Set metadata
+meta := docx.Metadata{
+    Title:       "Q1 Financial Report",
+    Author:      "Finance Department",
+    Subject:     "Quarterly Results",
+    Keywords:    "finance, Q1, 2026, report",
+    Description: "Detailed financial analysis for Q1 2026",
+    Category:    "Financial Reports",
+}
+template.SetMetadata(meta)
+
+// Configure page setup (values in twips: 1 inch = 1440 twips)
+pageSetup := docx.PageSetup{
+    PageWidth:    11906, // A4 width
+    PageHeight:   16838, // A4 height
+    MarginTop:    1440,  // 1 inch
+    MarginBottom: 1440,
+    MarginLeft:   1440,
+    MarginRight:  1440,
+}
+template.SetPageSetup(pageSetup)
+
+template.Save("output.docx")
+```
+
+---
+
+## Supported Document Formats
+
+| Format | Extension | Features |
+|--------|-----------|----------|
+| **Microsoft Word** | `.docx` | ✅ Full HTML support, conditionals, loops, tables, images, links, subtemplates, metadata |
+| **Microsoft Excel** | `.xlsx` | ✅ Cell placeholders, formula preservation, loops, HTML conversion |
+| **Microsoft PowerPoint** | `.pptx` | ✅ Slide placeholders, content duplication, HTML conversion |
+| **OpenDocument Text** | `.odt` | ✅ Text replacement, loops, HTML conversion |
+
+---
 
 ## License
 

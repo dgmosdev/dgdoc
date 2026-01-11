@@ -22,13 +22,37 @@
 go install github.com/dgmos/dgdoc/cmd/dgdoc@latest
 ```
 
-### Direct Download (Windows, macOS, Linux)
+### Direct Download (Pre-built Binaries)
 
 If you don't have Go installed, you can download the latest pre-built binaries from the [GitHub Releases](https://github.com/dgmos/dgdoc/releases) page.
 
-1. Download the archive for your operating system.
-2. Extract the `dgdoc` (or `dgdoc.exe`) binary.
-3. Move it to a folder in your system PATH (e.g., `/usr/local/bin` on macOS/Linux or a custom folder added to PATH on Windows).
+#### Windows
+1. Download `dgdoc_windows_amd64.zip`.
+2. Extract the `dgdoc.exe` file to a folder (e.g., `C:\dgdoc`).
+3. Add this folder to your system **PATH**:
+   - Search for "Environment Variables" in the Start menu.
+   - Edit the "Path" variable and add `C:\dgdoc`.
+4. Open PowerShell or CMD and type: `dgdoc --version`
+
+#### macOS (Intel & Apple Silicon)
+1. Download `dgdoc_darwin_arm64.tar.gz` (Apple Silicon) or `dgdoc_darwin_amd64.tar.gz` (Intel).
+2. Extract the archive.
+3. Open Terminal and run:
+   ```bash
+   sudo cp dgdoc /usr/local/bin/
+   sudo chmod +x /usr/local/bin/dgdoc
+   ```
+4. Verify by typing: `dgdoc --version`
+
+#### Linux
+1. Download `dgdoc_linux_amd64.tar.gz`.
+2. Extract the archive.
+3. Run:
+   ```bash
+   sudo cp dgdoc /usr/local/bin/
+   sudo chmod +x /usr/local/bin/dgdoc
+   ```
+4. Verify by typing: `dgdoc --version`
 
 ### As Library
 

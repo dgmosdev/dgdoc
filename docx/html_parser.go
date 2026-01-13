@@ -24,33 +24,35 @@ func (t *Template) HTMLToOOXML(htmlContent string) (string, error) {
 
 // textState tracks the current text formatting state
 type textState struct {
-	bold      bool
-	italic    bool
-	underline bool
-	strike    bool
-	fontSize  string
-	fontColor string
-	bgColor   string // background/highlight color
-	inList    bool
-	listType  string // "ul" or "ol"
-	listLevel int
-	listNum   int
+	bold        bool
+	italic      bool
+	underline   bool
+	strike      bool
+	fontSize    string
+	fontColor   string
+	bgColor     string // background/highlight color
+	inList      bool
+	listType    string // "ul" or "ol"
+	listLevel   int
+	listNum     int
+	inParagraph bool // true when inside a context that already created a <w:p> (li, td, th, heading)
 }
 
 // copyState creates a copy of the current text state
 func (s *textState) copy() *textState {
 	return &textState{
-		bold:      s.bold,
-		italic:    s.italic,
-		underline: s.underline,
-		strike:    s.strike,
-		fontSize:  s.fontSize,
-		fontColor: s.fontColor,
-		bgColor:   s.bgColor,
-		inList:    s.inList,
-		listType:  s.listType,
-		listLevel: s.listLevel,
-		listNum:   s.listNum,
+		bold:        s.bold,
+		italic:      s.italic,
+		underline:   s.underline,
+		strike:      s.strike,
+		fontSize:    s.fontSize,
+		fontColor:   s.fontColor,
+		bgColor:     s.bgColor,
+		inList:      s.inList,
+		listType:    s.listType,
+		listLevel:   s.listLevel,
+		listNum:     s.listNum,
+		inParagraph: s.inParagraph,
 	}
 }
 
@@ -113,7 +115,15 @@ func (t *Template) handleElement(n *html.Node, builder *strings.Builder, state *
 		}
 
 	case "p":
-		t.writeParagraph(n, builder, newState)
+		// If we're already inside a paragraph context (list item, table cell, heading),
+		// don't create a new paragraph, just process children.
+		if newState.inParagraph {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				t.convertNode(c, builder, newState)
+			}
+		} else {
+			t.writeParagraph(n, builder, newState)
+		}
 
 	case "br":
 		builder.WriteString(`<w:r><w:br/></w:r>`)
@@ -147,8 +157,14 @@ func (t *Template) handleElement(n *html.Node, builder *strings.Builder, state *
 		newState.listType = "ul"
 		newState.listLevel++
 		newState.listNum = 0
+		// Process children - for li elements, increment listNum before each
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			t.convertNode(c, builder, newState)
+			if c.Type == html.ElementNode && strings.ToLower(c.Data) == "li" {
+				newState.listNum++
+				t.writeListItem(c, builder, newState)
+			} else {
+				t.convertNode(c, builder, newState)
+			}
 		}
 
 	case "ol":
@@ -156,11 +172,20 @@ func (t *Template) handleElement(n *html.Node, builder *strings.Builder, state *
 		newState.listType = "ol"
 		newState.listLevel++
 		newState.listNum = 0
+		// Process children - for li elements, increment listNum before each
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			t.convertNode(c, builder, newState)
+			if c.Type == html.ElementNode && strings.ToLower(c.Data) == "li" {
+				newState.listNum++
+				t.writeListItem(c, builder, newState)
+			} else {
+				t.convertNode(c, builder, newState)
+			}
 		}
 
 	case "li":
+		// li is normally handled by ul/ol cases above to maintain proper numbering
+		// This case handles li elements that appear outside of ul/ol (unusual but possible)
+		newState.listNum++
 		t.writeListItem(n, builder, newState)
 
 	case "table":
@@ -238,39 +263,29 @@ func writeText(builder *strings.Builder, text string, state *textState) {
 }
 
 func (t *Template) writeListItem(n *html.Node, builder *strings.Builder, state *textState) {
-	state.listNum++
+	// Note: listNum is already incremented by the parent ul/ol handler
 
 	builder.WriteString(`<w:p>`)
 	builder.WriteString(`<w:pPr>`)
 
-	// Add list formatting
-	builder.WriteString(`<w:pStyle w:val="ListParagraph"/>`)
-	fmt.Fprintf(builder, `<w:numPr><w:ilvl w:val="%d"/>`, state.listLevel-1)
-
-	// Use different numId for ordered vs unordered
-	if state.listType == "ol" {
-		builder.WriteString(`<w:numId w:val="1"/>`)
-	} else {
-		builder.WriteString(`<w:numId w:val="2"/>`)
-	}
-	builder.WriteString(`</w:numPr>`)
-
-	// Add indentation
+	// Add indentation for list items (without relying on Word's numbering.xml)
 	indent := state.listLevel * 720 // 720 twips = 0.5 inch
 	fmt.Fprintf(builder, `<w:ind w:left="%d" w:hanging="360"/>`, indent)
 
 	builder.WriteString(`</w:pPr>`)
 
-	// Write list marker for bullet
+	// Write list marker manually - this ensures correct display regardless of template
 	if state.listType == "ul" {
-		builder.WriteString(`<w:r><w:rPr></w:rPr><w:t>• </w:t></w:r>`)
+		builder.WriteString(`<w:r><w:rPr></w:rPr><w:t xml:space="preserve">• </w:t></w:r>`)
 	} else {
-		fmt.Fprintf(builder, `<w:r><w:rPr></w:rPr><w:t>%d. </w:t></w:r>`, state.listNum)
+		fmt.Fprintf(builder, `<w:r><w:rPr></w:rPr><w:t xml:space="preserve">%d. </w:t></w:r>`, state.listNum)
 	}
 
-	// Process children
+	// Process children - mark that we're inside a paragraph context
+	childState := state.copy()
+	childState.inParagraph = true
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		t.convertNode(c, builder, state)
+		t.convertNode(c, builder, childState)
 	}
 	builder.WriteString(`</w:p>`)
 }
@@ -478,6 +493,8 @@ func (t *Template) writeTableCellWithMerge(n *html.Node, builder *strings.Builde
 	if isHeader {
 		cellState.bold = true
 	}
+	// Mark that we're inside a paragraph context so inner <p> tags don't create nested paragraphs
+	cellState.inParagraph = true
 
 	// Process cell content
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

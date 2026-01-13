@@ -20,7 +20,8 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     # this name template makes the archives generated use the name containing the OS/Arch
     name_template: >-
       {{ .ProjectName }}_
@@ -32,13 +33,14 @@ archives:
     # use zip for windows archives
     format_overrides:
     - goos: windows
-      format: zip
+      formats:
+        - zip
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -47,37 +49,3 @@ changelog:
       - '^docs:'
       - '^test:'
 
-brews:
-  -
-    # Name of the recipe
-    name: dgdoc
-
-    # Repository to push the tap to.
-    repository:
-      owner: dgmosdev
-      name: homebrew-tap
-      # Note: You need to create this repository (public) in your account/org.
-      # GoReleaser will push the formula file here.
-      
-      # If the repo is in the same org, standard GITHUB_TOKEN might work if it has write access.
-      # Otherwise, use a PAT (Personal Access Token) named GH_PAT in repository secrets.
-
-    # Git author used to commit to the repository.
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-
-    # The project name and description.
-    homepage: "https://github.com/dgmosdev/dgdoc"
-    description: "Go package and CLI tool for templating DOCX, PPTX, XLSX, and ODT files."
-    license: "MIT"
-
-    # Folder inside the repository to put the formula.
-    directory: Formula
-
-    # Caveats for the user
-    caveats: "Run 'dgdoc --help' to see usage examples."
-
-    # Install instructions
-    install: |
-      bin.install "dgdoc"

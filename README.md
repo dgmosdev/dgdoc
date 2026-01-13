@@ -5,6 +5,9 @@
 A high-performance Go library and CLI tool designed to dynamically populate DOCX templates with rich HTML content. **dgdoc** seamlessly converts HTML tables, lists, images, and styling into native Word elements, bridging the gap between web content and professional document reporting.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/dgmosdev/dgdoc.svg)](https://pkg.go.dev/github.com/dgmosdev/dgdoc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dgmosdev/dgdoc)](https://goreportcard.com/report/github.com/dgmosdev/dgdoc)
+[![License](https://img.shields.io/github/license/dgmosdev/dgdoc)](https://github.com/dgmosdev/dgdoc/blob/main/LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/dgmosdev/dgdoc)](https://github.com/dgmosdev/dgdoc/releases)
 
 ## Key Features
 
@@ -48,6 +51,13 @@ A high-performance Go library and CLI tool designed to dynamically populate DOCX
 
 ```bash
 go install github.com/dgmosdev/dgdoc/cmd/dgdoc@latest
+```
+
+### Via Homebrew (macOS & Linux)
+
+```bash
+brew tap dgmosdev/homebrew-tap
+brew install dgdoc
 ```
 
 ### Direct Download (Pre-built Binaries)

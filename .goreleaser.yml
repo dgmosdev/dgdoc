@@ -49,3 +49,19 @@ changelog:
       - '^docs:'
       - '^test:'
 
+brews:
+  -
+    name: dgdoc
+    repository:
+      owner: dgmosdev
+      name: homebrew-tap
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    homepage: "https://github.com/dgmosdev/dgdoc"
+    description: "Go package and CLI tool for templating DOCX, PPTX, XLSX, and ODT files."
+    license: "MIT"
+    directory: Formula
+    caveats: "Run 'dgdoc --help' to see usage examples."
+    install: |
+      bin.install "dgdoc"
